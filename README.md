@@ -88,27 +88,16 @@ ffmpeg -f lavfi -i "gradients=s=540x960:c0=0xff6b8a:c1=0xffd6df:x0=80:y0=120:x1=
 The "generic" stills are deliberately drab grey so the before/after toggle reads
 at a glance before a real LoRA is wired in.
 
-## Auth + saved runs (Convex)
+## Auth + saved runs (Clerk + Convex)
 
-Optional layer on top of the demo, not a gate in front of it — CLAUDE.md's "no
-auth" rule holds for the URL → gallery flow itself; a judge never has to sign
-in to see it work.
+Preload on `/`, then a compact Clerk card (Google, email, or **Continue as
+guest**), then the landing chooser. Guest is a cookie so judges never create
+an account. Saved runs persist only for Clerk-signed-in users.
 
-- **Backend:** Convex, running as a free local anonymous deployment (no
-  account needed — see above). `convex/schema.ts` defines a `generations`
-  table alongside Convex Auth's own user tables.
-- **Auth:** `@convex-dev/auth`, two providers — `Password` (email accounts at
-  `/auth`) and `Anonymous` ("Skip — save as guest", zero friction for judges).
-  The nav "Sign in" pill never blocks a route. `middleware.ts` only refreshes
-  the session cookie.
-- **What gets saved:** after a brand-film run finishes, `app/forge/page.tsx`
-  calls `generations.save` with the raw NDJSON event log. Signed out, the
-  mutation is a no-op (`convex/generations.ts`). Signed in, history lives at
-  `/runs`.
-- **Keys:** `JWT_PRIVATE_KEY`, `JWKS`, and `SITE_URL` are Convex deployment
-  env vars (not `.env.local`). After `npx convex login`, run
-  `npm run auth:keys` (optional `SITE_URL=http://localhost:3001`). Never run
-  the interactive `npx @convex-dev/auth` wizard — it hangs without a TTY.
+- **Auth:** `@clerk/nextjs`. Convex validates Clerk JWTs in `convex/auth.config.ts`.
+- **Google:** Clerk social connection — no Google Cloud client on Convex.
+- **Issuer:** `npx convex env set CLERK_JWT_ISSUER_DOMAIN=https://<instance>.clerk.accounts.dev`
+  and enable the Convex integration in the Clerk Dashboard (JWT template `convex`).
 
 ## Demo product
 
@@ -118,5 +107,5 @@ ranked in `demo-product-candidates.csv`.
 
 ## Stack
 
-Next.js 15 (App Router), React 19, Tailwind CSS v4, TypeScript, Convex +
-Convex Auth for the optional saved-runs layer.
+Next.js 15 (App Router), React 19, Tailwind CSS v4, TypeScript, Convex, and
+Clerk for sign-in.

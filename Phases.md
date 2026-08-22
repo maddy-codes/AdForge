@@ -123,7 +123,7 @@ never gates the core demo, which must work fully signed-out.
 | `convex/auth.ts`, `convex/auth.config.ts`, `convex/http.ts` | ✅ |
 | `generations.save` / `list` / `remove` mutations/query | ✅ |
 | `AuthWidget.tsx` + wired into `AppShell` | ✅ |
-| `/auth` email+password (+ guest) and `/runs` history | ✅ |
+| `/` intro → Clerk sign-in / guest → landing chooser | ✅ |
 | `saveGeneration` fire-and-forget call after each forge run | ✅ |
 | Decide: keep as demo bonus ("look, it persists your runs") or cut if it risks stage time | ⬜ decision not yet made — recommend keep only if Phase 2–5 finish early; it's real but not judged |
 

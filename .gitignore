@@ -27,3 +27,4 @@ public/cache/
 *.log
 .vscode/
 .idea/
+.clerk/

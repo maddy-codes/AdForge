@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Authenticated, Unauthenticated, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import AppShell from "../components/AppShell";
 
@@ -16,30 +16,12 @@ export default function RunsPage() {
           What you’ve forged.
         </h1>
         <p className="mt-5 max-w-md text-base leading-relaxed text-muted">
-          Brand-film runs land here after they finish — only if you were signed
-          in. Nothing here is a gate on the live demo.
+          Brand-film runs land here after they finish. Guest sessions stay on
+          this browser.
         </p>
       </header>
 
-      <Unauthenticated>
-        <div className="rise max-w-md rounded-[28px] border border-hairline bg-surface p-6">
-          <p className="font-display text-lg font-semibold tracking-tight">
-            Sign in to keep a history.
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            You can still forge ads without an account. History is the bonus.
-          </p>
-          <Link
-            href="/auth?next=/runs"
-            className="mt-6 inline-flex rounded-full bg-coral px-5 py-2.5 font-display text-[12px] font-semibold tracking-wide text-white uppercase"
-          >
-            Sign in
-          </Link>
-        </div>
-      </Unauthenticated>
-      <Authenticated>
-        <RunList />
-      </Authenticated>
+      <RunList />
     </AppShell>
   );
 }

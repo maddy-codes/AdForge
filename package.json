@@ -8,14 +8,12 @@
     "dev:convex": "convex dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "auth:keys": "node scripts/set-convex-auth-keys.mjs"
+    "lint": "next lint"
   },
   "dependencies": {
-    "@convex-dev/auth": "^0.0.95",
+    "@clerk/nextjs": "^7.8.0",
     "@fal-ai/client": "^1.10.1",
     "convex": "^1.45.0",
-    "jose": "^6.2.10",
     "jszip": "^3.10.1",
     "next": "^15.5.23",
     "openai": "^7.5.0",
