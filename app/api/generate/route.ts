@@ -131,7 +131,12 @@ async function runPipeline(
             concept.shots,
             lora?.loraId || null,
             index,
-            concept.hook
+            concept.hook,
+            {
+              name: facts.name,
+              category: facts.category,
+              materials: facts.materials,
+            }
           );
           await convex.mutation(api.jobs.updateRender, {
             ...job,

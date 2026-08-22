@@ -10,6 +10,7 @@ import {
   formatBriefForPrompt,
   type AdBrief,
 } from "@/lib/brief";
+import { productIdentityLock, productPhotoLock } from "@/lib/productIdentity";
 
 /**
  * Separate product surface: VEED talking-head spots (host sponsor).
@@ -81,7 +82,7 @@ const Spot = z.object({
   scenePrompt: z
     .string()
     .describe(
-      "One-paragraph image-model prompt: presenter holding the real product from the supplied photo, on a set in the brand's palette. See THE SET rules."
+      "One-paragraph image-model prompt: presenter holding the exact listed product from the supplied photo (same pack, same label, never a competitor or different container), on a set in the brand's palette. See THE SET rules."
     ),
   voiceDescription: z
     .string()
@@ -123,7 +124,7 @@ const SPOT_SYSTEM_PROMPT = [
   "",
   "THE SET (`scenePrompt`) — one paragraph for an image model that receives the real product photo and builds the frame VEED Fabric animates:",
   "- One presenter matching the brand's energy: age range, styling, expression. Waist-up, facing camera, mouth closed, relaxed natural pose — this face will be animated to speak.",
-  "- The presenter holds the product from the supplied photo up beside their face, label facing camera and legible. Never redraw, recolor or restyle the product itself.",
+  "- The presenter holds the product from the supplied photo up beside their face, label facing camera and legible. Never redraw, recolor or restyle the product itself. The pack in the photo is the pack in the frame — a can stays a can, a bottle stays a bottle. Never swap to a competitor or a generic lookalike.",
   "- The background IS the brand: name 2–3 concrete colours pulled from the tone (e.g. 'watermelon pink to mint pastel gradient'), a set that fits the category (bathroom shelf for skincare, desk for tech), soft key light.",
   "- Vertical 9:16 phone-ad framing. No text, no logos, no watermarks anywhere in the frame.",
   "",
@@ -148,6 +149,8 @@ const SPOT_SYSTEM_PROMPT = [
   "- `musicBed`: genre, BPM, no-lyrics or not, and where it lifts.",
   "",
   "GROUNDING — never invent ingredients, percentages, or prices; use only the provided facts. The avatar must feel like this brand, not a generic AI presenter. Banned words: Discover, Experience, Revitalize, Elevate, game-changer.",
+  "",
+  "PRODUCT IDENTITY — the listed SKU is the hero. Same brand, same container, same label as the product page. Diet Coke can ≠ Diet Coke bottle ≠ Pepsi. Describe the exact pack from the facts and the supplied photo; do not invent a different form.",
 ].join("\n");
 
 export async function avatarSpot(
@@ -165,7 +168,9 @@ export async function avatarSpot(
       messages: [
         {
           role: "system",
-          content: [SPOT_SYSTEM_PROMPT, director].filter(Boolean).join("\n\n"),
+          content: [SPOT_SYSTEM_PROMPT, productIdentityLock(facts), director]
+            .filter(Boolean)
+            .join("\n\n"),
         },
         {
           role: "user",
@@ -266,7 +271,7 @@ async function buildBrandedFrame(
 ): Promise<string> {
   const { data } = await getFal().subscribe("fal-ai/nano-banana/edit", {
     input: {
-      prompt: scenePrompt,
+      prompt: `${productPhotoLock()} ${scenePrompt}`,
       image_urls: [productImage],
       aspect_ratio: "9:16",
       output_format: "png",
