@@ -7,7 +7,7 @@ const STEPS: { stage: Stage; label: string; partner: string }[] = [
   { stage: "reviews", label: "Listen", partner: "Tavily" },
   { stage: "lora", label: "Brand-match", partner: "fal · LoRA" },
   { stage: "concepts", label: "Direct", partner: "OpenAI" },
-  { stage: "render", label: "Generate", partner: "fal · Kling + VEED" },
+  { stage: "render", label: "Generate", partner: "fal · pack + Kling + VEED" },
 ];
 
 export default function PipelineSteps({

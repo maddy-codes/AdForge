@@ -6,7 +6,7 @@ import {
   formatBriefForPrompt,
   type AdBrief,
 } from "@/lib/brief";
-import { productIdentityLock } from "@/lib/productIdentity";
+import { productIdentityLock, VIDEO_ENGLISH_LOCK } from "@/lib/productIdentity";
 
 /**
  * Stage 3 — OpenAI as creative director.
@@ -30,7 +30,7 @@ const DirectedConcept = z.object({
     .describe("One of the provided customer quotes, copied character-for-character."),
   hook: z
     .string()
-    .describe("3–8 word on-screen headline inspired by that quote. No hashtags."),
+    .describe("3–8 word on-screen headline inspired by that quote. English only. No hashtags."),
   script: z
     .string()
     .describe(
@@ -39,7 +39,7 @@ const DirectedConcept = z.object({
   shots: z
     .array(z.string())
     .describe(
-      "Exactly 3 Flux/Kling prompts. One camera setup each. Visual only. Name the exact listed SKU — brand, pack form (can vs bottle vs jar vs tube vs box), label. Never a competitor or a different container."
+      "Exactly 3 shot prompts. One camera setup each. Visual only — set, light, motion around the listed pack. The listing photo is the hero; never describe a competitor or a different container."
     ),
 });
 
@@ -183,13 +183,14 @@ async function directConcepts(
           "You are the creative director for AdForge, which turns a product URL into 9:16 short-form video ads.",
           `Write exactly ${CONCEPT_COUNT} distinct ad concepts — different strategies, not three cuts of the same idea (e.g. speed/proof vs texture/layering vs transformation).`,
           "For each concept pick a different customer quote as sourceQuote, copied character-for-character from the list.",
-          "hook: punchy, spoken, 3–8 words. Sound like a customer, not a campaign title. No title case, no hashtags.",
-          "script: a director's storyboard, not brochure copy. OPEN ON / CUT TO / END CARD. The only spoken VO is the customer quote plus at most one short line. Forbidden openers: Discover, Experience, Revitalize, Transform, Unleash.",
+          "hook: punchy, spoken, 3–8 words in English. Sound like a customer, not a campaign title. No title case, no hashtags.",
+          "script: a director's storyboard, not brochure copy. OPEN ON / CUT TO / END CARD. The only spoken VO is the customer quote plus at most one short English line. Forbidden openers: Discover, Experience, Revitalize, Transform, Unleash.",
+          VIDEO_ENGLISH_LOCK,
           "The sourceQuote MUST appear inside the script character-for-character, wrapped in quotation marks. That verbatim line is the whole point of the review crawl.",
           "Never invent ingredients, prices, or claims that are not in the product facts or the chosen quote.",
           "Name the real product and price on the end card. Ground the visual in category, materials, and tone.",
           productIdentityLock(facts),
-          "Each shots[] item is a single camera setup that will be concatenated into a Flux keyframe + Kling image-to-video prompt: concrete lighting, surface, product position, motion. The product in frame is the listed SKU — same pack, same label — plus the set around it. No hashtags, no camera-jargon dumps.",
+          "Each shots[] item describes SET, lighting, camera, and motion around the listing pack. The real product photo is composited into the keyframe — do not invent a different container, label, or brand. Any invented on-screen type is English. No hashtags, no camera-jargon dumps.",
           shotConstraint,
           director ?? "",
         ]

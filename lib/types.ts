@@ -34,7 +34,7 @@ export type RenderResult = {
   videoUrl: string;
   /** Keyframe the video was animated from — powers the before/after toggle. */
   keyframeUrl?: string;
-  /** Same keyframe generated WITHOUT the brand LoRA. The "before". */
+  /** Invented keyframe (no listing photo) — the "before" on the card toggle. */
   genericKeyframeUrl?: string;
 };
 

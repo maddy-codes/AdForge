@@ -57,6 +57,59 @@ export const assetKindValidator = v.union(
   v.literal("other")
 );
 
+export const jobKindValidator = v.union(
+  v.literal("forge"),
+  v.literal("intel"),
+  v.literal("avatar")
+);
+
+export const intelResultValidator = v.object({
+  brand: v.string(),
+  category: v.string(),
+  rivals: v.array(v.object({ name: v.string(), angle: v.string() })),
+  formulas: v.array(
+    v.object({
+      competitor: v.string(),
+      sourceTitle: v.string(),
+      sourceUrl: v.string(),
+      hookType: v.string(),
+      whyItWorked: v.string(),
+      structure: v.array(v.string()),
+      prompt: v.string(),
+    })
+  ),
+});
+
+export const avatarSpotValidator = v.object({
+  brand: v.string(),
+  avatarId: v.string(),
+  avatarLook: v.string(),
+  scenePrompt: v.string(),
+  voiceDescription: v.string(),
+  productImage: v.union(v.string(), v.null()),
+  musicBed: v.string(),
+  captions: v.string(),
+  vo: v.string(),
+  script: v.string(),
+});
+
+export const avatarRenderValidator = v.object({
+  videoUrl: v.string(),
+  engine: v.union(
+    v.literal("fabric"),
+    v.literal("stock"),
+    v.literal("mock")
+  ),
+  cached: v.boolean(),
+  mock: v.boolean(),
+});
+
+export const avatarStateValidator = v.object({
+  spot: v.optional(avatarSpotValidator),
+  video: v.optional(avatarRenderValidator),
+  renderNote: v.optional(v.string()),
+});
+
 export default defineSchema({
   // One row per pipeline run.
   jobs: defineTable({
@@ -85,7 +138,15 @@ export default defineSchema({
     error: v.optional(v.string()),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
-  }).index("by_user", ["userId"]),
+    // Optional so existing forge rows stay valid. Missing kind = forge.
+    kind: v.optional(jobKindValidator),
+    // Browser session so guests can list their own overlapping runs.
+    sessionId: v.optional(v.string()),
+    intel: v.optional(intelResultValidator),
+    avatar: v.optional(avatarStateValidator),
+  })
+    .index("by_user", ["userId"])
+    .index("by_session", ["sessionId"]),
 
   // Saved-run history for signed-in users, keyed by Clerk subject.
   generations: defineTable({

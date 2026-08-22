@@ -7,6 +7,13 @@ import { useSessionGate } from "./useSessionGate";
 
 export const MODES = [
   {
+    href: "/avatar",
+    label: "Avatar spots",
+    kicker: "VEED",
+    blurb: "A talking-head spokesperson tailored to the brand — VO, captions, music bed.",
+    tint: "bg-lilac text-ink",
+  },
+  {
     href: "/forge",
     label: "Brand films",
     kicker: "fal · LoRA",
@@ -20,13 +27,6 @@ export const MODES = [
     blurb: "See who else in the category went viral. Reverse-engineer the shape into a prompt you can shoot.",
     tint: "bg-mint text-ink",
   },
-  {
-    href: "/avatar",
-    label: "Avatar spots",
-    kicker: "VEED",
-    blurb: "A talking-head spokesperson tailored to the brand — VO, captions, music bed.",
-    tint: "bg-lilac text-ink",
-  },
 ] as const;
 
 export default function AppShell({
@@ -39,7 +39,7 @@ export default function AppShell({
   quiet?: boolean;
 }) {
   const path = usePathname();
-  const { isIn, isSignedIn } = useSessionGate();
+  const { isIn } = useSessionGate();
 
   return (
     <div className="relative overflow-hidden">
@@ -78,21 +78,6 @@ export default function AppShell({
                   </Link>
                 );
               })}
-              {isSignedIn && (
-                <Link
-                  href="/assets"
-                  className={`rounded-full px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide uppercase ${
-                    path === "/assets"
-                      ? "bg-ink text-mint"
-                      : "bg-surface text-muted hover:text-ink"
-                  }`}
-                >
-                  Assets
-                </Link>
-              )}
-              <span className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
-                {status}
-              </span>
               <AuthWidget />
             </div>
           )}
