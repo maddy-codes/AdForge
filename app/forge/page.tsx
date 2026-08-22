@@ -7,7 +7,9 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import PipelineSteps from "../components/PipelineSteps";
 import AdCard from "../components/AdCard";
+import AdBriefForm from "../components/AdBrief";
 import AppShell from "../components/AppShell";
+import { emptyBrief, parseBrief, type AdBrief } from "@/lib/brief";
 import { DEMO_URL } from "@/lib/stages/extract";
 import type { Concept, RenderResult, Stage, StageStatus } from "@/lib/types";
 
@@ -26,6 +28,7 @@ function ForgeInner() {
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [liveMs, setLiveMs] = useState(0);
+  const [brief, setBrief] = useState<AdBrief>(emptyBrief);
 
   const snapshot = useQuery(api.jobs.watch, jobId ? { jobId } : "skip");
   const job = snapshot?.job;
@@ -81,7 +84,7 @@ function ForgeInner() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, brief: parseBrief(brief) }),
       });
       if (!res.ok) throw new Error(`kickoff failed (${res.status})`);
       const { jobId: id } = (await res.json()) as { jobId: Id<"jobs"> };
@@ -138,6 +141,15 @@ function ForgeInner() {
         >
           {cta}
         </button>
+      </div>
+
+      <div className="mt-3" style={{ animationDelay: "140ms" }}>
+        <AdBriefForm
+          mode="forge"
+          value={brief}
+          onChange={setBrief}
+          disabled={running}
+        />
       </div>
 
       <section className="rise mt-5" style={{ animationDelay: "180ms" }}>

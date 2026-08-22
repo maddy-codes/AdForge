@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import AppShell from "../components/AppShell";
+import AdBriefForm from "../components/AdBrief";
+import { emptyBrief, parseBrief, type AdBrief } from "@/lib/brief";
 import { DEMO_URL } from "@/lib/stages/extract";
 import type { AvatarRender, AvatarSpot } from "@/lib/stages/avatar";
 
@@ -20,6 +22,7 @@ export default function AvatarPage() {
   const [error, setError] = useState<string | null>(null);
   const [renderNote, setRenderNote] = useState<string | null>(null);
   const [spot, setSpot] = useState<AvatarSpot | null>(null);
+  const [brief, setBrief] = useState<AdBrief>(emptyBrief);
   const [video, setVideo] = useState<AvatarRender | null>(null);
 
   const running = phase === "casting" || phase === "rendering";
@@ -34,7 +37,7 @@ export default function AvatarPage() {
       const res = await fetch("/api/avatar", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, brief: parseBrief(brief) }),
       });
       const data = (await res.json()) as AvatarSpot & { error?: string };
       if (!res.ok) throw new Error(data.error || "avatar failed");
@@ -121,6 +124,15 @@ export default function AvatarPage() {
               ? "VEED speaking…"
               : "Cast avatar"}
         </button>
+      </div>
+
+      <div className="mt-3">
+        <AdBriefForm
+          mode="avatar"
+          value={brief}
+          onChange={setBrief}
+          disabled={running}
+        />
       </div>
 
       {error && (

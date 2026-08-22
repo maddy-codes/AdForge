@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import AppShell from "../components/AppShell";
+import AdBriefForm from "../components/AdBrief";
+import { emptyBrief, parseBrief, type AdBrief } from "@/lib/brief";
 import { DEMO_URL } from "@/lib/stages/extract";
 import type { IntelResult, StolenFormula } from "@/lib/stages/intel";
 
@@ -12,6 +14,7 @@ export default function IntelPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<IntelResult | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [brief, setBrief] = useState<AdBrief>(emptyBrief);
 
   async function run() {
     setRunning(true);
@@ -21,7 +24,7 @@ export default function IntelPage() {
       const res = await fetch("/api/intel", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, brief: parseBrief(brief) }),
       });
       const data = (await res.json()) as IntelResult & { error?: string };
       if (!res.ok) throw new Error(data.error || "intel failed");
@@ -75,6 +78,15 @@ export default function IntelPage() {
         >
           {running ? "Reading rivals…" : "Find formulas"}
         </button>
+      </div>
+
+      <div className="mt-3">
+        <AdBriefForm
+          mode="intel"
+          value={brief}
+          onChange={setBrief}
+          disabled={running}
+        />
       </div>
 
       {error && (

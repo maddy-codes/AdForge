@@ -2,6 +2,11 @@ import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { getOpenAI } from "@/lib/openai";
 import type { Concept, ProductFacts, ReviewHook } from "@/lib/types";
+import {
+  formatBriefForPrompt,
+  type AdBrief,
+} from "@/lib/brief";
+import { productIdentityLock } from "@/lib/productIdentity";
 
 /**
  * Stage 3 — OpenAI as creative director.
@@ -34,7 +39,7 @@ const DirectedConcept = z.object({
   shots: z
     .array(z.string())
     .describe(
-      "Exactly 3 Flux/Kling prompts. One camera setup each. Visual only. Include the real product, materials, and brand tone."
+      "Exactly 3 Flux/Kling prompts. One camera setup each. Visual only. Name the exact listed SKU — brand, pack form (can vs bottle vs jar vs tube vs box), label. Never a competitor or a different container."
     ),
 });
 
@@ -114,13 +119,24 @@ export function ensureVerbatimQuote(script: string, quote: string): string {
   return `${trimmed}${spacer}"${quote}"`;
 }
 
+const SHOT_IDENTITY =
+  "exact listed SKU, same brand and pack form and label, not a competitor or a different container";
+
+function stampShot(shot: string, facts: ProductFacts): string {
+  const named = shot.toLowerCase().includes(facts.name.toLowerCase())
+    ? shot
+    : `${facts.name}, ${shot}`;
+  if (named.toLowerCase().includes("exact listed sku")) return named;
+  return `${named}. Hero is ${facts.name}, ${SHOT_IDENTITY}`;
+}
+
 function normalizeShots(shots: string[], facts: ProductFacts): string[] {
   const cleaned = shots.map((s) => s.trim()).filter(Boolean);
   const fallback = `${facts.name} hero on a clean surface, ${facts.tone} lighting, product-accurate materials (${facts.materials.slice(0, 3).join(", ")})`;
   while (cleaned.length < SHOTS_PER_CONCEPT) {
     cleaned.push(cleaned[cleaned.length - 1] ?? fallback);
   }
-  return cleaned.slice(0, SHOTS_PER_CONCEPT);
+  return cleaned.slice(0, SHOTS_PER_CONCEPT).map((shot) => stampShot(shot, facts));
 }
 
 function toConcepts(
@@ -143,7 +159,8 @@ function toConcepts(
 
 async function directConcepts(
   facts: ProductFacts,
-  hooks: ReviewHook[]
+  hooks: ReviewHook[],
+  brief?: AdBrief
 ): Promise<Concept[]> {
   const quoteBlock =
     hooks.length === 0
@@ -151,6 +168,11 @@ async function directConcepts(
       : hooks
           .map((h, i) => `${i + 1}. "${h.quote}" — theme: ${h.theme}`)
           .join("\n");
+
+  const director = formatBriefForPrompt(brief);
+  const shotConstraint = brief?.constraint
+    ? `Shot prompts MUST honour this constraint: ${brief.constraint}. If it says no faces, never put a person in frame. If product only, the product is the actor.`
+    : "";
 
   const completion = await getOpenAI().chat.completions.parse({
     model: MODEL,
@@ -166,8 +188,13 @@ async function directConcepts(
           "The sourceQuote MUST appear inside the script character-for-character, wrapped in quotation marks. That verbatim line is the whole point of the review crawl.",
           "Never invent ingredients, prices, or claims that are not in the product facts or the chosen quote.",
           "Name the real product and price on the end card. Ground the visual in category, materials, and tone.",
-          "Each shots[] item is a single camera setup that will be concatenated into a Flux keyframe + Kling image-to-video prompt: concrete lighting, surface, product position, motion. No hashtags, no camera-jargon dumps.",
-        ].join("\n"),
+          productIdentityLock(facts),
+          "Each shots[] item is a single camera setup that will be concatenated into a Flux keyframe + Kling image-to-video prompt: concrete lighting, surface, product position, motion. The product in frame is the listed SKU — same pack, same label — plus the set around it. No hashtags, no camera-jargon dumps.",
+          shotConstraint,
+          director ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
       {
         role: "user",
@@ -188,7 +215,10 @@ async function directConcepts(
           "",
           "Customer review quotes (copy verbatim):",
           quoteBlock,
-        ].join("\n"),
+          director ? `\n${director}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
     ],
     response_format: zodResponseFormat(DirectedConcepts, "ad_concepts"),
@@ -210,14 +240,15 @@ async function directConcepts(
 
 export async function concepts(
   facts: ProductFacts,
-  hooks: ReviewHook[]
+  hooks: ReviewHook[],
+  brief?: AdBrief
 ): Promise<Concept[]> {
   if (!process.env.OPENAI_API_KEY) {
     return getMockConcepts();
   }
 
   try {
-    return await directConcepts(facts, hooks);
+    return await directConcepts(facts, hooks, brief);
   } catch (err) {
     console.error("[concepts] OpenAI failed, falling back to mock:", err);
     return getMockConcepts();

@@ -26,6 +26,9 @@ export default function AdCard({
 }) {
   const [showGeneric, setShowGeneric] = useState(false);
   const [wipe, setWipe] = useState<number | null>(null);
+  const [shareState, setShareState] = useState<
+    "idle" | "working" | "shared" | "copied" | "saved"
+  >("idle");
   const frameRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const canCompare = Boolean(result.genericKeyframeUrl && result.keyframeUrl);
@@ -63,6 +66,35 @@ export default function AdCard({
   function select(generic: boolean) {
     setWipe(null);
     setShowGeneric(generic);
+  }
+
+  const filename = `adforge-${String(index + 1).padStart(2, "0")}.mp4`;
+  const caption = concept.hook;
+
+  async function shareOut() {
+    setShareState("working");
+    try {
+      const outcome = await shareVideo(result.videoUrl, caption, filename);
+      setShareState(outcome);
+      window.setTimeout(() => setShareState("idle"), 1800);
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setShareState("idle");
+        return;
+      }
+      setShareState("idle");
+    }
+  }
+
+  async function downloadOut() {
+    setShareState("working");
+    try {
+      await downloadVideo(result.videoUrl, caption, filename);
+      setShareState("saved");
+      window.setTimeout(() => setShareState("idle"), 1800);
+    } catch {
+      setShareState("idle");
+    }
   }
 
   return (
@@ -180,6 +212,30 @@ export default function AdCard({
         <h3 className="font-display text-xl leading-snug font-semibold tracking-tight">
           {concept.hook}
         </h3>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => void shareOut()}
+            disabled={shareState === "working"}
+            className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase disabled:opacity-40"
+          >
+            {shareState === "working"
+              ? "Preparing…"
+              : shareState === "shared"
+                ? "Opened share"
+                : shareState === "copied"
+                  ? "Caption copied"
+                  : "Share"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void downloadOut()}
+            disabled={shareState === "working"}
+            className="rounded-full border border-hairline bg-surface px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-muted uppercase hover:text-ink disabled:opacity-40"
+          >
+            {shareState === "saved" ? "Saved · caption copied" : "Download"}
+          </button>
+        </div>
         {review && (
           <p className="flex flex-wrap items-baseline gap-2 text-sm text-muted">
             <span className="italic text-ink/80">“{review.quote}”</span>
@@ -205,4 +261,60 @@ export default function AdCard({
       </div>
     </article>
   );
+}
+
+async function videoFile(url: string, name: string): Promise<File | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new File([blob], name, { type: blob.type || "video/mp4" });
+  } catch {
+    return null;
+  }
+}
+
+async function copyCaption(caption: string) {
+  try {
+    await navigator.clipboard.writeText(caption);
+  } catch {
+    /* clipboard can fail without a secure context */
+  }
+}
+
+async function shareVideo(
+  url: string,
+  caption: string,
+  name: string,
+): Promise<"shared" | "copied"> {
+  const file = await videoFile(url, name);
+  if (
+    file &&
+    typeof navigator.canShare === "function" &&
+    navigator.canShare({ files: [file] })
+  ) {
+    await navigator.share({ files: [file], text: caption, title: caption });
+    return "shared";
+  }
+  if (typeof navigator.share === "function") {
+    await navigator.share({ text: caption, url, title: caption });
+    return "shared";
+  }
+  await copyCaption(caption);
+  return "copied";
+}
+
+async function downloadVideo(url: string, caption: string, name: string) {
+  const file = await videoFile(url, name);
+  if (file) {
+    const href = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = name;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+  await copyCaption(caption);
 }

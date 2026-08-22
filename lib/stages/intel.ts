@@ -4,6 +4,10 @@ import { getOpenAI } from "@/lib/openai";
 import { tavilySearch, type TavilySearchResult } from "@/lib/tavily";
 import { extract } from "@/lib/stages/extract";
 import type { ProductFacts } from "@/lib/types";
+import {
+  formatBriefForPrompt,
+  type AdBrief,
+} from "@/lib/brief";
 
 /**
  * Separate product surface from brand-film generation.
@@ -152,12 +156,19 @@ const RIVALS_SYSTEM_PROMPT = [
   "- Return exactly 3 rivals, 4 only if a fourth brings a genuinely different formula.",
 ].join("\n");
 
-async function nameRivals(facts: ProductFacts): Promise<Rival[]> {
+async function nameRivals(
+  facts: ProductFacts,
+  brief?: AdBrief
+): Promise<Rival[]> {
+  const director = formatBriefForPrompt(brief);
   const completion = await getOpenAI().chat.completions.parse({
     model: "gpt-4o",
     temperature: 0.4,
     messages: [
-      { role: "system", content: RIVALS_SYSTEM_PROMPT },
+      {
+        role: "system",
+        content: [RIVALS_SYSTEM_PROMPT, director].filter(Boolean).join("\n\n"),
+      },
       {
         role: "user",
         content: JSON.stringify({
@@ -241,7 +252,7 @@ const FORMULA_SYSTEM_PROMPT = [
   "- `whyItWorked`: one or two sentences of mechanism, not praise. Say what the device does to the viewer.",
   "- `structure`: 4–6 beats with rough timings for an ~8s vertical ad, e.g. '0–1s — HOOK: …'. Beats must be transferable — describe the device, never the competitor's product or talent.",
   "- `sourceTitle` / `sourceUrl`: pick the single strongest snippet as evidence. Use its real URL.",
-  "- `prompt`: 60–120 words for an image-to-video model, shootable for OUR product with no edits. It must: be 9:16; open on the hook beat; follow the structure's shot rhythm; use OUR product's name, real price, tone and one real feature; specify palette/lighting consistent with OUR tone; end on an end card with name + price.",
+  "- `prompt`: 60–120 words for an image-to-video model, shootable for OUR product with no edits. It must: be 9:16; open on the hook beat; follow the structure's shot rhythm; use OUR product's name, real price, tone and one real feature; specify palette/lighting consistent with OUR tone; end on an end card with name + price. The hero is OUR listed SKU — same brand, same pack form, same label. A can stays a can; never a competitor or a different container.",
   "",
   "Hard bans, no exceptions:",
   "- No competitor names, talent, taglines, VO lines, packaging, logos or trade dress anywhere in `prompt`.",
@@ -254,13 +265,18 @@ const FORMULA_SYSTEM_PROMPT = [
 async function reverseEngineer(
   facts: ProductFacts,
   rivals: Rival[],
-  snippets: AdSnippet[]
+  snippets: AdSnippet[],
+  brief?: AdBrief
 ): Promise<StolenFormula[]> {
+  const director = formatBriefForPrompt(brief);
   const completion = await getOpenAI().chat.completions.parse({
     model: "gpt-4o",
     temperature: 0.5,
     messages: [
-      { role: "system", content: FORMULA_SYSTEM_PROMPT },
+      {
+        role: "system",
+        content: [FORMULA_SYSTEM_PROMPT, director].filter(Boolean).join("\n\n"),
+      },
       {
         role: "user",
         content: JSON.stringify({
@@ -274,6 +290,7 @@ async function reverseEngineer(
           },
           rivals,
           adSnippets: snippets,
+          directorBrief: director,
         }),
       },
     ],
@@ -284,19 +301,22 @@ async function reverseEngineer(
   return parsed.formulas;
 }
 
-export async function competitorIntel(url: string): Promise<IntelResult> {
+export async function competitorIntel(
+  url: string,
+  brief?: AdBrief
+): Promise<IntelResult> {
   const live = Boolean(process.env.TAVILY_API_KEY && process.env.OPENAI_API_KEY);
   if (!live) return getMockIntel();
 
   try {
     const facts = await extract(url);
-    const rivals = await nameRivals(facts);
+    const rivals = await nameRivals(facts, brief);
 
     const searches = await Promise.all(
       rivals.map((rival) => searchRivalAds(rival, facts.category))
     );
     const snippets = searches.flat();
-    const formulas = await reverseEngineer(facts, rivals, snippets);
+    const formulas = await reverseEngineer(facts, rivals, snippets, brief);
 
     return {
       brand: facts.name,

@@ -1,5 +1,10 @@
 import type { RenderResult } from "@/lib/types";
 import { getFal } from "@/lib/fal";
+import {
+  productIdentityLock,
+  productMotionLock,
+  type ProductIdentity,
+} from "@/lib/productIdentity";
 
 /**
  * Stage 4 — render one video per concept.
@@ -91,7 +96,8 @@ export async function render(
   shots: string[],
   loraId: string | null,
   index = 0,
-  captionText?: string
+  captionText?: string,
+  product?: ProductIdentity
 ): Promise<RenderResult> {
   if (!process.env.FAL_KEY) {
     // Staggered so cards stream in one at a time (D7) instead of all at once.
@@ -99,12 +105,18 @@ export async function render(
     return getMockRender(index);
   }
 
-  const prompt = shots.join(". ");
+  const body = shots.join(". ");
+  const keyframePrompt = product
+    ? `${productIdentityLock(product)} ${body}`
+    : body;
+  const motionPrompt = product
+    ? `${productMotionLock(product)} ${body}`
+    : body;
   const [keyframeUrl, genericKeyframeUrl] = await Promise.all([
-    generateKeyframe(prompt, loraId),
-    generateKeyframe(prompt, null),
+    generateKeyframe(keyframePrompt, loraId),
+    generateKeyframe(keyframePrompt, null),
   ]);
-  const rawVideoUrl = await animateKeyframe(keyframeUrl, prompt);
+  const rawVideoUrl = await animateKeyframe(keyframeUrl, motionPrompt);
 
   let videoUrl = rawVideoUrl;
   if (captionText) {
