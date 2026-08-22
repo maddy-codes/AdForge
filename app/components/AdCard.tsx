@@ -11,7 +11,8 @@ const GLOWS = [
 
 /**
  * Comparison is the card. Sliding bezel is the 2-meter signal;
- * drag-wipe is the close-up. Generic is a still, Brand LoRA is video.
+ * drag-wipe is the close-up. Generic is an invented still; on-pack is
+ * the listing photo composited into the film.
  */
 export default function AdCard({
   index,
@@ -119,7 +120,7 @@ export default function AdCard({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={result.genericKeyframeUrl}
-              alt="No LoRA — generic output"
+              alt="Generic — invented pack"
               draggable={false}
               className="absolute inset-0 h-full w-full object-cover"
             />
@@ -171,7 +172,7 @@ export default function AdCard({
         {canCompare ? (
           <div
             role="group"
-            aria-label="Compare generic and brand LoRA"
+            aria-label="Compare generic and on-pack"
             className="relative mt-2 grid grid-cols-2 rounded-full bg-canvas p-1"
           >
             <span
@@ -188,7 +189,7 @@ export default function AdCard({
                 genericActive ? "text-white" : "text-muted hover:text-ink"
               }`}
             >
-              No LoRA
+              Generic
             </button>
             <button
               type="button"
@@ -198,12 +199,12 @@ export default function AdCard({
                 !genericActive ? "text-mint" : "text-muted hover:text-ink"
               }`}
             >
-              Brand LoRA
+              On-pack
             </button>
           </div>
         ) : (
           <p className="mt-2 rounded-full bg-ink py-2 text-center font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
-            Brand LoRA
+            On-pack
           </p>
         )}
       </div>

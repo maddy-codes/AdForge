@@ -8,6 +8,7 @@ import {
   formatBriefForPrompt,
   type AdBrief,
 } from "@/lib/brief";
+import { VIDEO_ENGLISH_LOCK } from "@/lib/productIdentity";
 
 /**
  * Separate product surface from brand-film generation.
@@ -252,10 +253,11 @@ const FORMULA_SYSTEM_PROMPT = [
   "- `whyItWorked`: one or two sentences of mechanism, not praise. Say what the device does to the viewer.",
   "- `structure`: 4–6 beats with rough timings for an ~8s vertical ad, e.g. '0–1s — HOOK: …'. Beats must be transferable — describe the device, never the competitor's product or talent.",
   "- `sourceTitle` / `sourceUrl`: pick the single strongest snippet as evidence. Use its real URL.",
-  "- `prompt`: 60–120 words for an image-to-video model, shootable for OUR product with no edits. It must: be 9:16; open on the hook beat; follow the structure's shot rhythm; use OUR product's name, real price, tone and one real feature; specify palette/lighting consistent with OUR tone; end on an end card with name + price. The hero is OUR listed SKU — same brand, same pack form, same label. A can stays a can; never a competitor or a different container.",
+  "- `prompt`: 60–120 words for an image-to-video model, shootable for OUR product with no edits. It must: be 9:16; open on the hook beat; follow the structure's shot rhythm; use OUR product's name, real price, tone and one real feature; specify palette/lighting consistent with OUR tone; end on an end card with name + price. The hero is OUR listed SKU — same brand, same pack form, same label. A can stays a can; never a competitor or a different container. Every on-screen word in the prompt is English.",
   "",
   "Hard bans, no exceptions:",
   "- No competitor names, talent, taglines, VO lines, packaging, logos or trade dress anywhere in `prompt`.",
+  `- ${VIDEO_ENGLISH_LOCK}`,
   "- Never invent ingredients, percentages or prices — only what OUR product facts contain.",
   "- No brochure verbs (Discover, Experience, Revitalize, Elevate).",
   "",

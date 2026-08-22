@@ -7,10 +7,16 @@ export type ProductIdentity = {
   name: string;
   category?: string;
   materials?: string[];
+  /** Listing photo composited into the keyframe. Local /mock paths do not qualify. */
+  imageUrl?: string | null;
 };
 
 const FORM_RULE =
   "Same brand, same pack form, same label. A can stays a can, a bottle stays a bottle, a jar stays a jar, a tube stays a tube. Never a competitor (Diet Coke is not Pepsi), never a different container, never a different size, never a generic unbranded lookalike.";
+
+/** Spoken VO, captions, hooks, end cards, overlays — English only. Pack labels stay as printed. */
+export const VIDEO_ENGLISH_LOCK =
+  "LANGUAGE — every word written or spoken for the video is English: hook, captions, voiceover, end-card type, on-screen overlays. Do not invent text in any other language. The real product label in the listing photo stays as printed.";
 
 /** For text-to-image / creative-director prompts (brand films, intel, avatar brief). */
 export function productIdentityLock(product: ProductIdentity): string {
@@ -25,6 +31,7 @@ export function productIdentityLock(product: ProductIdentity): string {
     "Keep the real logo, label art, colours, and silhouette readable.",
     materials ? `Pack/materials to match: ${materials}.` : "",
     "Invent lighting, set, motion, and props AROUND the product. Do not redesign the product itself.",
+    VIDEO_ENGLISH_LOCK,
   ]
     .filter(Boolean)
     .join(" ");
@@ -36,6 +43,7 @@ export function productMotionLock(product: ProductIdentity): string {
     `Keep ${product.name} exactly as it appears in the keyframe.`,
     FORM_RULE,
     "Do not morph, restyle, or replace the product. Animate camera, lighting, hands, and set around it.",
+    VIDEO_ENGLISH_LOCK,
   ].join(" ");
 }
 
@@ -49,6 +57,18 @@ export function productPhotoLock(): string {
     "Composite that exact object into the scene unchanged — same container, label, logo, colours, silhouette.",
     "Do not redraw, restyle, recolor, or replace it.",
     "A can is not a bottle. Do not swap brands.",
-    "Add presenter, set, and lighting around it.",
+    "Invent set, lighting, and props around it. Follow the shot for the set only.",
+    VIDEO_ENGLISH_LOCK,
   ].join(" ");
+}
+
+const MERCH = /hoodie|tote|t-?shirt|merch|crewneck|sweatshirt/i;
+
+/** First usable listing photo — http, not an svg, skip obvious merch. */
+export function pickListingPhoto(urls: string[] | undefined): string | null {
+  if (!urls?.length) return null;
+  const http = urls.filter(
+    (u) => /^https?:\/\//i.test(u) && !/\.svg(\?|#|$)/i.test(u)
+  );
+  return http.find((u) => !MERCH.test(u)) ?? http[0] ?? null;
 }

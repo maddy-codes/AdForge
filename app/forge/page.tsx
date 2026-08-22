@@ -2,14 +2,17 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useQuery } from "convex/react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import PipelineSteps from "../components/PipelineSteps";
 import AdCard from "../components/AdCard";
 import AdBriefForm from "../components/AdBrief";
 import AppShell from "../components/AppShell";
+import RunRail from "../components/RunRail";
+import { useRunSession } from "../components/useRunSession";
 import { emptyBrief, parseBrief, type AdBrief } from "@/lib/brief";
+import { ensureRunSession } from "@/lib/runSession";
 import { DEMO_URL } from "@/lib/stages/extract";
 import type { Concept, RenderResult, Stage, StageStatus } from "@/lib/types";
 
@@ -19,32 +22,35 @@ const SLOTS = [0, 1, 2];
 
 function ForgeInner() {
   const params = useSearchParams();
+  const router = useRouter();
+  const sessionId = useRunSession();
   const [url, setUrl] = useState(params.get("url") || DEMO_URL);
-  // Re-attach to a live run after a refresh: the job id rides the URL and
-  // all state comes back through the subscription below.
-  const [jobId, setJobId] = useState<Id<"jobs"> | null>(
-    (params.get("job") as Id<"jobs"> | null) ?? null
-  );
+  const urlJob = (params.get("job") as Id<"jobs"> | null) ?? null;
+  const [jobId, setJobId] = useState<Id<"jobs"> | null>(urlJob);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [liveMs, setLiveMs] = useState(0);
   const [brief, setBrief] = useState<AdBrief>(emptyBrief);
 
+  useEffect(() => {
+    setJobId(urlJob);
+  }, [urlJob]);
+
   const snapshot = useQuery(api.jobs.watch, jobId ? { jobId } : "skip");
   const job = snapshot?.job;
   const renders = snapshot?.renders ?? [];
 
-  const running = submitting || job?.status === "running";
+  const watching = job?.status === "running";
   const startedAt = job?.startedAt;
 
   useEffect(() => {
-    if (!running || startedAt === undefined) return;
+    if (!watching || startedAt === undefined) return;
     const id = setInterval(
       () => setLiveMs(Math.max(0, Date.now() - startedAt)),
       100
     );
     return () => clearInterval(id);
-  }, [running, startedAt]);
+  }, [watching, startedAt]);
 
   const statuses: Partial<Record<Stage, StageStatus>> = {};
   const details: Partial<Record<Stage, string>> = {};
@@ -77,19 +83,21 @@ function ForgeInner() {
   async function run() {
     setSubmitting(true);
     setLocalError(null);
-    setJobId(null);
-    setLiveMs(0);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url, brief: parseBrief(brief) }),
+        body: JSON.stringify({
+          url,
+          brief: parseBrief(brief),
+          sessionId: sessionId ?? ensureRunSession(),
+        }),
       });
       if (!res.ok) throw new Error(`kickoff failed (${res.status})`);
       const { jobId: id } = (await res.json()) as { jobId: Id<"jobs"> };
       setJobId(id);
-      window.history.replaceState(null, "", `/forge?job=${id}`);
+      router.replace(`/forge?job=${id}`, { scroll: false });
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -98,11 +106,17 @@ function ForgeInner() {
   }
 
   const extra = cards.filter((c) => c.index > 2);
-  const cta = running ? "Forging…" : error ? "Retry" : "Forge ads";
-  const timer = elapsed ?? (running && jobId ? liveMs : null);
+  const cta = submitting
+    ? "Starting…"
+    : watching
+      ? "Forge another"
+      : error
+        ? "Retry"
+        : "Forge ads";
+  const timer = elapsed ?? (watching && jobId ? liveMs : null);
 
   return (
-    <AppShell status={running ? "Live" : "Ready"}>
+    <AppShell status={watching || submitting ? "Live" : "Ready"}>
       <header className="rise mb-10 max-w-4xl">
         <p className="mb-4 inline-flex rounded-full bg-ink px-3 py-1 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
           Brand films
@@ -123,21 +137,21 @@ function ForgeInner() {
       </header>
 
       <div
-        className="rise flex flex-col gap-2 rounded-[28px] border border-hairline bg-surface p-2 shadow-[0_20px_50px_-30px_rgb(17_17_17/0.4)] sm:flex-row"
+        className="rise flex items-stretch gap-2 overflow-hidden rounded-[28px] border border-hairline bg-surface p-2 shadow-[0_20px_50px_-30px_rgb(17_17_17/0.4)]"
         style={{ animationDelay: "100ms" }}
       >
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !running && run()}
+          onKeyDown={(e) => e.key === "Enter" && !submitting && run()}
           placeholder="https://your-product-page…"
           spellCheck={false}
-          className="flex-1 rounded-2xl bg-canvas px-4 py-3.5 font-mono text-sm outline-none placeholder:text-muted/50"
+          className="min-w-0 flex-1 rounded-2xl bg-canvas px-4 py-3 font-mono text-sm outline-none placeholder:text-muted/50"
         />
         <button
           onClick={run}
-          disabled={running || !url}
-          className="cta-pop rounded-2xl bg-coral px-8 py-3.5 font-display text-base font-bold text-white transition-transform disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none"
+          disabled={submitting || !url}
+          className="shrink-0 rounded-2xl bg-coral px-5 py-3 font-display text-sm font-bold whitespace-nowrap text-white disabled:opacity-40"
         >
           {cta}
         </button>
@@ -148,12 +162,15 @@ function ForgeInner() {
           mode="forge"
           value={brief}
           onChange={setBrief}
-          disabled={running}
+          disabled={submitting}
         />
       </div>
 
       <section className="rise mt-5" style={{ animationDelay: "180ms" }}>
         <PipelineSteps statuses={statuses} details={details} elapsed={timer} />
+        <div className="mt-3">
+          <RunRail />
+        </div>
       </section>
 
       {error && (
@@ -170,7 +187,7 @@ function ForgeInner() {
             if (!card)
               return (
                 <div key={slot} className={`w-full max-w-[280px] ${lift}`}>
-                  <EmptyFrame index={slot} running={running} />
+                  <EmptyFrame index={slot} running={watching} />
                 </div>
               );
             return (

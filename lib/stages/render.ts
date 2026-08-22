@@ -1,25 +1,25 @@
 import type { RenderResult } from "@/lib/types";
 import { getFal } from "@/lib/fal";
+import { compositeListingFrame } from "@/lib/compositeFrame";
 import {
   productIdentityLock,
   productMotionLock,
+  VIDEO_ENGLISH_LOCK,
   type ProductIdentity,
 } from "@/lib/productIdentity";
 
 /**
  * Stage 4 — render one video per concept.
  *
- * D6, three internal stages (external contract stays `render(shots, loraId)`,
- * `captionText` is an optional fourth param added for VEED captions):
- *   1. `fal-ai/flux-lora` generates an on-brand keyframe from the shot list
- *   2. Kling 2.5 Turbo Pro (i2v) animates that keyframe
- *   3. `veed/subtitles` (fal) burns the concept's hook in as a styled caption —
- *      `srt_content` is supplied directly so it skips transcription entirely
- *      (the Kling clip has no audio track to transcribe from)
+ *   1. On-pack keyframe: nano-banana composites the listing photo into the
+ *      shot (same path as avatar spots). Flux + LoRA is the fallback if there
+ *      is no http photo, or if the composite fails.
+ *   2. Kling 2.5 Turbo Pro (i2v) animates that keyframe — told not to morph
+ *      the pack already in frame.
+ *   3. `veed/subtitles` burns the concept's hook as a caption.
  *
- * The generic keyframe — same prompt, no LoRA — is rendered alongside it purely
- * to power the before/after toggle. That toggle is the money shot for the jury,
- * and the LoRA difference reads hardest on a still frame.
+ * The generic keyframe is Flux with no listing photo, so the card toggle is
+ * invented pack vs real pack.
  */
 
 const MOCK_VIDEOS = ["/mock/ad-1.mp4", "/mock/ad-2.mp4", "/mock/ad-3.mp4"];
@@ -51,6 +51,24 @@ async function generateKeyframe(
     },
   });
   return (data as { images: { url: string }[] }).images[0].url;
+}
+
+async function onPackKeyframe(
+  prompt: string,
+  loraId: string | null,
+  productImage?: string | null
+): Promise<string> {
+  if (productImage) {
+    try {
+      return await compositeListingFrame(prompt, productImage);
+    } catch (err) {
+      console.error(
+        "[render] listing-pack composite failed, falling back to Flux:",
+        err
+      );
+    }
+  }
+  return generateKeyframe(prompt, loraId);
 }
 
 async function animateKeyframe(
@@ -108,12 +126,12 @@ export async function render(
   const body = shots.join(". ");
   const keyframePrompt = product
     ? `${productIdentityLock(product)} ${body}`
-    : body;
+    : `${VIDEO_ENGLISH_LOCK} ${body}`;
   const motionPrompt = product
-    ? `${productMotionLock(product)} ${body}`
-    : body;
+    ? `${productMotionLock(product)} ${VIDEO_ENGLISH_LOCK} ${body}`
+    : `${VIDEO_ENGLISH_LOCK} ${body}`;
   const [keyframeUrl, genericKeyframeUrl] = await Promise.all([
-    generateKeyframe(keyframePrompt, loraId),
+    onPackKeyframe(keyframePrompt, loraId, product?.imageUrl),
     generateKeyframe(keyframePrompt, null),
   ]);
   const rawVideoUrl = await animateKeyframe(keyframeUrl, motionPrompt);

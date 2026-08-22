@@ -1,23 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import AppShell from "../components/AppShell";
+import { useRunSession } from "../components/useRunSession";
+import { runHref, runLabel } from "@/lib/runSession";
 
 export default function RunsPage() {
   return (
     <AppShell status="History">
       <header className="rise mb-10 max-w-xl">
         <p className="mb-4 inline-flex rounded-full bg-ink px-3 py-1 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
-          Saved runs
+          All runs
         </p>
         <h1 className="font-display text-[2.5rem] leading-[1.05] font-semibold tracking-[-0.04em] md:text-5xl">
           What you’ve forged.
         </h1>
         <p className="mt-5 max-w-md text-base leading-relaxed text-muted">
-          Brand-film runs land here after they finish. Guest sessions stay on
-          this browser.
+          Live and finished runs stay here. Leave a page mid-run — it keeps
+          going. Open one to re-attach.
         </p>
       </header>
 
@@ -27,8 +29,8 @@ export default function RunsPage() {
 }
 
 function RunList() {
-  const history = useQuery(api.generations.list);
-  const remove = useMutation(api.generations.remove);
+  const sessionId = useRunSession();
+  const history = useQuery(api.jobs.history, { sessionId });
 
   if (history === undefined) {
     return (
@@ -45,7 +47,8 @@ function RunList() {
           No runs yet.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted">
-          Finish a brand-film forge while signed in and it’ll show up here.
+          Start a brand film, intel, or avatar spot. It’ll show up here even
+          if you navigate away.
         </p>
         <Link
           href="/forge"
@@ -61,15 +64,16 @@ function RunList() {
     <ul className="flex max-w-2xl flex-col gap-3">
       {history.map((row, i) => {
         const seconds =
-          row.elapsedMs !== undefined
-            ? `${(row.elapsedMs / 1000).toFixed(1)}s`
+          row.finishedAt !== undefined
+            ? `${((row.finishedAt - row.startedAt) / 1000).toFixed(1)}s`
             : null;
-        const when = new Date(row._creationTime).toLocaleString(undefined, {
+        const when = new Date(row.startedAt).toLocaleString(undefined, {
           month: "short",
           day: "numeric",
           hour: "2-digit",
           minute: "2-digit",
         });
+        const href = runHref(row.kind, row._id);
         return (
           <li
             key={row._id}
@@ -84,24 +88,18 @@ function RunList() {
                 {row.url}
               </p>
               <p className="mt-2 font-display text-[11px] font-semibold tracking-wide text-muted uppercase">
-                {when}
+                {runLabel(row.kind)} · {row.status}
+                {` · ${when}`}
                 {seconds ? ` · ${seconds}` : ""}
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
               <Link
-                href={`/forge?url=${encodeURIComponent(row.url)}`}
+                href={href}
                 className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase"
               >
-                Forge again
+                {row.status === "running" ? "Re-attach" : "Open"}
               </Link>
-              <button
-                type="button"
-                onClick={() => void remove({ id: row._id })}
-                className="rounded-full border border-hairline px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-muted uppercase hover:text-danger"
-              >
-                Delete
-              </button>
             </div>
           </li>
         );

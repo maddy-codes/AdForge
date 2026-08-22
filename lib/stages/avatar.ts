@@ -6,11 +6,12 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import { getOpenAI } from "@/lib/openai";
 import { getFal } from "@/lib/fal";
 import { extract } from "@/lib/stages/extract";
+import { compositeListingFrame } from "@/lib/compositeFrame";
 import {
   formatBriefForPrompt,
   type AdBrief,
 } from "@/lib/brief";
-import { productIdentityLock, productPhotoLock } from "@/lib/productIdentity";
+import { pickListingPhoto, productIdentityLock, VIDEO_ENGLISH_LOCK } from "@/lib/productIdentity";
 
 /**
  * Separate product surface: VEED talking-head spots (host sponsor).
@@ -138,6 +139,7 @@ const SPOT_SYSTEM_PROMPT = [
   "- 12–20 seconds spoken ≈ 35–55 words. Count them.",
   "- Plain speech only: no stage directions, no emoji, no ALL-CAPS, no headings, nothing a human would not say aloud.",
   "- First sentence is the hook — mid-thought, specific, never a greeting.",
+  "- English only: vo, captions, and any on-screen line. Do not write another language.",
   "- Include ONE real-sounding customer line in quotes, woven in naturally.",
   "- Say the product name and the real price exactly once each.",
   "- Numbers as a voice would say them (write 'thirty-six dollars', not '$36').",
@@ -151,6 +153,8 @@ const SPOT_SYSTEM_PROMPT = [
   "GROUNDING — never invent ingredients, percentages, or prices; use only the provided facts. The avatar must feel like this brand, not a generic AI presenter. Banned words: Discover, Experience, Revitalize, Elevate, game-changer.",
   "",
   "PRODUCT IDENTITY — the listed SKU is the hero. Same brand, same container, same label as the product page. Diet Coke can ≠ Diet Coke bottle ≠ Pepsi. Describe the exact pack from the facts and the supplied photo; do not invent a different form.",
+  "",
+  VIDEO_ENGLISH_LOCK,
 ].join("\n");
 
 export async function avatarSpot(
@@ -191,8 +195,7 @@ export async function avatarSpot(
     if (!parsed) throw new Error("no avatar spot");
     // The branded frame is built on a real product photo — local mock svgs
     // aren't reachable from fal, so only http URLs qualify.
-    const productImage =
-      facts.imageUrls.find((u) => u.startsWith("http")) ?? null;
+    const productImage = pickListingPhoto(facts.imageUrls);
     return { brand: facts.name, productImage, ...parsed };
   } catch (err) {
     console.error("[avatar] failed, falling back to mock:", err);
@@ -260,28 +263,6 @@ async function writeRenderCache(key: string, entry: CacheEntry): Promise<void> {
   }
 }
 
-/**
- * The branded frame: nano-banana composites the REAL product photo into the
- * scenePrompt's set — presenter holding the product, brand-palette backdrop.
- * This frame is what VEED Fabric animates, so the whole video is on-brand.
- */
-async function buildBrandedFrame(
-  scenePrompt: string,
-  productImage: string
-): Promise<string> {
-  const { data } = await getFal().subscribe("fal-ai/nano-banana/edit", {
-    input: {
-      prompt: `${productPhotoLock()} ${scenePrompt}`,
-      image_urls: [productImage],
-      aspect_ratio: "9:16",
-      output_format: "png",
-    },
-  });
-  const url = (data as { images: { url: string }[] }).images[0]?.url;
-  if (!url) throw new Error("nano-banana returned no frame");
-  return url;
-}
-
 /** VEED Fabric: the presenter in our branded frame speaks the VO. */
 async function fabricSpeak(
   frameUrl: string,
@@ -347,7 +328,7 @@ export async function renderAvatarSpot(
   let rawUrl: string | null = null;
   if (productImage && scenePrompt) {
     try {
-      const frameUrl = await buildBrandedFrame(scenePrompt, productImage);
+      const frameUrl = await compositeListingFrame(scenePrompt, productImage);
       rawUrl = await fabricSpeak(frameUrl, vo, voiceDescription);
       engine = "fabric";
     } catch (err) {

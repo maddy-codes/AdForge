@@ -1,38 +1,71 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import AppShell from "../components/AppShell";
 import AdBriefForm from "../components/AdBrief";
+import RunRail from "../components/RunRail";
+import { useRunSession } from "../components/useRunSession";
 import { emptyBrief, parseBrief, type AdBrief } from "@/lib/brief";
+import { ensureRunSession } from "@/lib/runSession";
 import { DEMO_URL } from "@/lib/stages/extract";
-import type { IntelResult, StolenFormula } from "@/lib/stages/intel";
+import type { StolenFormula } from "@/lib/stages/intel";
 
 export default function IntelPage() {
-  const [url, setUrl] = useState(DEMO_URL);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<IntelResult | null>(null);
+  return (
+    <Suspense>
+      <IntelInner />
+    </Suspense>
+  );
+}
+
+function IntelInner() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const sessionId = useRunSession();
+  const urlJob = (params.get("job") as Id<"jobs"> | null) ?? null;
+  const [url, setUrl] = useState(params.get("url") || DEMO_URL);
+  const [jobId, setJobId] = useState<Id<"jobs"> | null>(urlJob);
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [brief, setBrief] = useState<AdBrief>(emptyBrief);
 
+  useEffect(() => {
+    setJobId(urlJob);
+  }, [urlJob]);
+
+  const snapshot = useQuery(api.jobs.watch, jobId ? { jobId } : "skip");
+  const job = snapshot?.job;
+  const result = job?.intel ?? null;
+  const watching = job?.status === "running";
+  const error = localError ?? job?.error ?? null;
+
   async function run() {
-    setRunning(true);
-    setError(null);
-    setResult(null);
+    setSubmitting(true);
+    setLocalError(null);
     try {
       const res = await fetch("/api/intel", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url, brief: parseBrief(brief) }),
+        body: JSON.stringify({
+          url,
+          brief: parseBrief(brief),
+          sessionId: sessionId ?? ensureRunSession(),
+        }),
       });
-      const data = (await res.json()) as IntelResult & { error?: string };
-      if (!res.ok) throw new Error(data.error || "intel failed");
-      setResult(data);
+      if (!res.ok) throw new Error(`kickoff failed (${res.status})`);
+      const { jobId: id } = (await res.json()) as { jobId: Id<"jobs"> };
+      setJobId(id);
+      router.replace(`/intel?job=${id}`, { scroll: false });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setLocalError(err instanceof Error ? err.message : String(err));
     } finally {
-      setRunning(false);
+      setSubmitting(false);
     }
   }
 
@@ -43,7 +76,7 @@ export default function IntelPage() {
   }
 
   return (
-    <AppShell status={running ? "Crawling" : "Ready"}>
+    <AppShell status={watching || submitting ? "Crawling" : "Ready"}>
       <header className="rise mb-10 max-w-3xl">
         <p className="mb-4 inline-flex rounded-full bg-ink px-3 py-1 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
           Competitor formulas
@@ -62,21 +95,25 @@ export default function IntelPage() {
         </p>
       </header>
 
-      <div className="flex flex-col gap-2 rounded-[28px] border border-hairline bg-surface p-2 sm:flex-row">
+      <div className="flex items-stretch gap-2 overflow-hidden rounded-[28px] border border-hairline bg-surface p-2">
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !running && run()}
+          onKeyDown={(e) => e.key === "Enter" && !submitting && run()}
           placeholder="https://your-product-page…"
           spellCheck={false}
-          className="flex-1 rounded-2xl bg-canvas px-4 py-3.5 font-mono text-sm outline-none placeholder:text-muted/50"
+          className="min-w-0 flex-1 rounded-2xl bg-canvas px-4 py-3 font-mono text-sm outline-none placeholder:text-muted/50"
         />
         <button
           onClick={run}
-          disabled={running || !url}
-          className="cta-pop rounded-2xl bg-coral px-8 py-3.5 font-display text-base font-bold text-white transition-transform disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none"
+          disabled={submitting || !url}
+          className="shrink-0 rounded-2xl bg-coral px-5 py-3 font-display text-sm font-bold whitespace-nowrap text-white disabled:opacity-40"
         >
-          {running ? "Reading rivals…" : "Find formulas"}
+          {submitting
+            ? "Starting…"
+            : watching
+              ? "Find another"
+              : "Find formulas"}
         </button>
       </div>
 
@@ -85,13 +122,23 @@ export default function IntelPage() {
           mode="intel"
           value={brief}
           onChange={setBrief}
-          disabled={running}
+          disabled={submitting}
         />
+      </div>
+
+      <div className="mt-5">
+        <RunRail />
       </div>
 
       {error && (
         <p className="mt-6 font-display text-sm font-semibold text-danger">
           {error}
+        </p>
+      )}
+
+      {watching && !result && (
+        <p className="mt-6 font-display text-sm font-semibold text-muted">
+          Reading rivals — you can leave this page, the run stays live.
         </p>
       )}
 

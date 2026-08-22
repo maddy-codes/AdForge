@@ -7,9 +7,13 @@ import {
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import schema, {
+  avatarRenderValidator,
+  avatarSpotValidator,
   conceptValidator,
   factsValidator,
   hookValidator,
+  intelResultValidator,
+  jobKindValidator,
   renderStatusValidator,
 } from "./schema";
 
@@ -30,6 +34,35 @@ const stageNameValidator = v.union(
 );
 
 const PENDING = { status: "pending" as const };
+const SKIPPED = { status: "skipped" as const };
+
+function initialStages(kind: "forge" | "intel" | "avatar") {
+  if (kind === "intel") {
+    return {
+      extract: PENDING,
+      reviews: SKIPPED,
+      concepts: PENDING,
+      lora: SKIPPED,
+      render: SKIPPED,
+    };
+  }
+  if (kind === "avatar") {
+    return {
+      extract: PENDING,
+      reviews: SKIPPED,
+      concepts: PENDING,
+      lora: SKIPPED,
+      render: PENDING,
+    };
+  }
+  return {
+    extract: PENDING,
+    reviews: PENDING,
+    concepts: PENDING,
+    lora: PENDING,
+    render: PENDING,
+  };
+}
 
 /** Clerk subject of the signed-in caller, or null. Matches generations.ts. */
 async function clerkUserId(ctx: QueryCtx | MutationCtx) {
@@ -49,22 +82,25 @@ async function requireJob(
 
 /** Mint a run. Signed-in creators get it attached to their history. */
 export const create = mutation({
-  args: { url: v.string(), token: v.string() },
+  args: {
+    url: v.string(),
+    token: v.string(),
+    kind: v.optional(jobKindValidator),
+    sessionId: v.optional(v.string()),
+  },
   returns: v.id("jobs"),
   handler: async (ctx, args) => {
     const userId = await clerkUserId(ctx);
+    const kind = args.kind ?? "forge";
+    const sessionId = args.sessionId?.trim() || undefined;
     return ctx.db.insert("jobs", {
       url: args.url,
       token: args.token,
       userId: userId ?? undefined,
+      sessionId,
+      kind,
       status: "running",
-      stages: {
-        extract: PENDING,
-        reviews: PENDING,
-        concepts: PENDING,
-        lora: PENDING,
-        render: PENDING,
-      },
+      stages: initialStages(kind),
       startedAt: Date.now(),
     });
   },
@@ -261,6 +297,85 @@ export const fail = mutation({
   },
 });
 
+export const recordIntel = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    token: v.string(),
+    result: intelResultValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await requireJob(ctx, args.jobId, args.token);
+    await ctx.db.patch(args.jobId, {
+      intel: args.result,
+      status: "done",
+      finishedAt: Date.now(),
+      stages: {
+        ...job.stages,
+        extract: { status: "done", detail: args.result.brand },
+        concepts: {
+          status: "done",
+          detail: `${args.result.formulas.length} formulas`,
+        },
+      },
+    });
+    return null;
+  },
+});
+
+export const recordAvatarSpot = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    token: v.string(),
+    spot: avatarSpotValidator,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await requireJob(ctx, args.jobId, args.token);
+    await ctx.db.patch(args.jobId, {
+      avatar: { ...job.avatar, spot: args.spot },
+      stages: {
+        ...job.stages,
+        extract: { status: "done", detail: args.spot.brand },
+        concepts: { status: "done", detail: "cast" },
+        render: { status: "running", detail: "VEED rendering" },
+      },
+    });
+    return null;
+  },
+});
+
+export const recordAvatarVideo = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    token: v.string(),
+    video: v.optional(avatarRenderValidator),
+    renderNote: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await requireJob(ctx, args.jobId, args.token);
+    const failed = !args.video;
+    await ctx.db.patch(args.jobId, {
+      avatar: {
+        ...job.avatar,
+        video: args.video,
+        renderNote: args.renderNote,
+      },
+      status: "done",
+      finishedAt: Date.now(),
+      stages: {
+        ...job.stages,
+        render: {
+          status: failed ? "failed" : "done",
+          detail: failed ? "brief only" : args.video?.engine,
+        },
+      },
+    });
+    return null;
+  },
+});
+
 /** The UI's single reactive subscription: job (sans token) + its renders. */
 export const watch = query({
   args: { jobId: v.id("jobs") },
@@ -284,38 +399,62 @@ export const watch = query({
   },
 });
 
-/** Signed-in user's past runs, newest first. Empty when signed out. */
-export const history = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("jobs"),
-      url: v.string(),
-      productName: v.optional(v.string()),
-      status: v.union(
-        v.literal("running"),
-        v.literal("done"),
-        v.literal("failed")
-      ),
-      startedAt: v.number(),
-      finishedAt: v.optional(v.number()),
-    })
+const runSummary = v.object({
+  _id: v.id("jobs"),
+  kind: jobKindValidator,
+  url: v.string(),
+  productName: v.optional(v.string()),
+  status: v.union(
+    v.literal("running"),
+    v.literal("done"),
+    v.literal("failed")
   ),
-  handler: async (ctx) => {
+  startedAt: v.number(),
+  finishedAt: v.optional(v.number()),
+});
+
+function summarize(job: Doc<"jobs">) {
+  return {
+    _id: job._id,
+    kind: job.kind ?? ("forge" as const),
+    url: job.url,
+    productName:
+      job.facts?.name ?? job.intel?.brand ?? job.avatar?.spot?.brand,
+    status: job.status,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+  };
+}
+
+/** This browser's / this user's runs, newest first. Includes in-flight. */
+export const history = query({
+  args: { sessionId: v.optional(v.string()) },
+  returns: v.array(runSummary),
+  handler: async (ctx, args) => {
     const userId = await clerkUserId(ctx);
-    if (!userId) return [];
-    const jobs = await ctx.db
-      .query("jobs")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .order("desc")
-      .take(20);
-    return jobs.map((job) => ({
-      _id: job._id,
-      url: job.url,
-      productName: job.facts?.name,
-      status: job.status,
-      startedAt: job.startedAt,
-      finishedAt: job.finishedAt,
-    }));
+    const sessionId = args.sessionId?.trim() || undefined;
+    const byUser = userId
+      ? await ctx.db
+          .query("jobs")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .order("desc")
+          .take(20)
+      : [];
+    const bySession = sessionId
+      ? await ctx.db
+          .query("jobs")
+          .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+          .order("desc")
+          .take(20)
+      : [];
+    const seen = new Set<string>();
+    const merged: Doc<"jobs">[] = [];
+    for (const job of [...byUser, ...bySession]) {
+      if (seen.has(job._id)) continue;
+      seen.add(job._id);
+      merged.push(job);
+    }
+    merged.sort((a, b) => b.startedAt - a.startedAt);
+    return merged.slice(0, 20).map(summarize);
   },
 });

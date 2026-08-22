@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse, after } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { api } from "@/convex/_generated/api";
@@ -10,6 +9,8 @@ import { concepts, CONCEPT_COUNT } from "@/lib/stages/concepts";
 import { trainLora, type LoraResult } from "@/lib/stages/lora";
 import { render } from "@/lib/stages/render";
 import { parseBrief, type AdBrief } from "@/lib/brief";
+import { pickListingPhoto } from "@/lib/productIdentity";
+import { mintJob } from "@/lib/kickoffJob";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,15 +24,16 @@ type BrandAssets = { urls: string[]; cacheKey: string } | null;
  * instead of losing it.
  */
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { url?: string; brief?: unknown };
+  const body = (await req.json()) as {
+    url?: string;
+    brief?: unknown;
+    sessionId?: string;
+  };
   const url = body.url;
   if (!url) {
     return NextResponse.json({ error: "url required" }, { status: 400 });
   }
   const brief = parseBrief(body.brief);
-
-  // Per-job write bearer: stored on the job, never sent to the browser.
-  const token = randomUUID();
 
   // Only job creation is auth-aware (attaches the run to a signed-in user's
   // history); the background workers authenticate with the job token alone.
@@ -41,7 +43,11 @@ export async function POST(req: NextRequest) {
     ?.getToken({ template: "convex" })
     .catch(() => undefined);
   if (authToken) convex.setAuth(authToken);
-  const jobId = await convex.mutation(api.jobs.create, { url, token });
+  const { jobId, token } = await mintJob(
+    url,
+    "forge",
+    typeof body.sessionId === "string" ? body.sessionId : undefined
+  );
 
   // Signed-in users with an asset library train the LoRA on their stored
   // shots (cached per brand) instead of re-scraping the page every run.
@@ -136,6 +142,9 @@ async function runPipeline(
               name: facts.name,
               category: facts.category,
               materials: facts.materials,
+              imageUrl:
+                pickListingPhoto(facts.imageUrls) ??
+                pickListingPhoto(brandAssets?.urls),
             }
           );
           await convex.mutation(api.jobs.updateRender, {
