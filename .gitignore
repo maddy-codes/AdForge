@@ -16,6 +16,10 @@ next-env.d.ts
 .cache/
 public/cache/
 
+# Claude Code local state / worktrees
+.claude/worktrees/
+.claude/settings.local.json
+
 # OS / editor
 .DS_Store
 *.log
