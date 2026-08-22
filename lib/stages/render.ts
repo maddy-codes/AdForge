@@ -1,4 +1,5 @@
 import type { RenderResult } from "@/lib/types";
+import { getFal } from "@/lib/fal";
 
 /**
  * Stage 4 — render one video per concept.
@@ -29,6 +30,31 @@ export function getMockRender(index: number): RenderResult {
   };
 }
 
+async function generateKeyframe(
+  prompt: string,
+  loraId: string | null
+): Promise<string> {
+  const { data } = await getFal().subscribe("fal-ai/flux-lora", {
+    input: {
+      prompt,
+      image_size: "portrait_16_9",
+      loras: loraId ? [{ path: loraId, scale: 1 }] : [],
+    },
+  });
+  return (data as { images: { url: string }[] }).images[0].url;
+}
+
+async function animateKeyframe(
+  keyframeUrl: string,
+  prompt: string
+): Promise<string> {
+  const { data } = await getFal().subscribe(
+    "fal-ai/kling-video/v2.5-turbo/pro/image-to-video",
+    { input: { image_url: keyframeUrl, prompt } }
+  );
+  return (data as { video: { url: string } }).video.url;
+}
+
 export async function render(
   shots: string[],
   loraId: string | null,
@@ -39,8 +65,13 @@ export async function render(
     await new Promise((r) => setTimeout(r, 1200 + index * 900));
     return getMockRender(index);
   }
-  // TODO(G): flux-lora keyframe (with and without loraId) -> Kling 2.5 i2v.
-  void shots;
-  void loraId;
-  return getMockRender(index);
+
+  const prompt = shots.join(". ");
+  const [keyframeUrl, genericKeyframeUrl] = await Promise.all([
+    generateKeyframe(prompt, loraId),
+    generateKeyframe(prompt, null),
+  ]);
+  const videoUrl = await animateKeyframe(keyframeUrl, prompt);
+
+  return { videoUrl, keyframeUrl, genericKeyframeUrl };
 }

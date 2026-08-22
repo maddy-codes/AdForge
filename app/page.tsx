@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import PipelineSteps from "./components/PipelineSteps";
 import AdCard from "./components/AdCard";
+import AuthWidget from "./components/AuthWidget";
 import { DEMO_URL } from "@/lib/stages/extract";
 import type {
   Concept,
@@ -18,6 +22,7 @@ type Card = { index: number; concept: Concept; result: RenderResult };
 const SLOTS = [0, 1, 2];
 
 export default function Home() {
+  const saveGeneration = useMutation(api.generations.save);
   const [url, setUrl] = useState(DEMO_URL);
   const [running, setRunning] = useState(false);
   const [statuses, setStatuses] = useState<Partial<Record<Stage, StageStatus>>>(
@@ -92,6 +97,9 @@ export default function Home() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      const collected: PipelineEvent[] = [];
+      let productName: string | undefined;
+      let finalElapsed: number | undefined;
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -100,8 +108,24 @@ export default function Home() {
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
-          if (line.trim()) apply(JSON.parse(line) as PipelineEvent);
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as PipelineEvent;
+          apply(event);
+          collected.push(event);
+          if (event.type === "facts") productName = event.facts.name;
+          if (event.type === "done") finalElapsed = event.elapsedMs;
         }
+      }
+
+      // Save the run for a signed-in user; a no-op mutation when signed out
+      // (see convex/generations.ts). Never blocks or gates the demo itself.
+      if (finalElapsed !== undefined) {
+        void saveGeneration({
+          url,
+          productName,
+          elapsedMs: finalElapsed,
+          events: collected,
+        }).catch(() => {});
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -121,6 +145,35 @@ export default function Home() {
         <span className="orb orb-mint float-b top-[8%] right-[-6%] h-[22rem] w-[22rem] opacity-90" />
         <span className="orb orb-lilac float-c right-[18%] bottom-[-10%] h-[26rem] w-[26rem] opacity-75" />
         <span className="orb orb-coral float-b top-[48%] left-[8%] h-40 w-40 opacity-50" />
+    <main className="mx-auto max-w-6xl px-6 py-14">
+      <header className="mb-10 flex items-start justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-semibold tracking-tight">
+            Ad<span className="text-melon">Forge</span>
+          </h1>
+          <p className="mt-2 max-w-xl text-white/50">
+            Paste a product URL. Get on-brand short-form ads written around
+            what real customers actually praise. Minutes, not weeks.
+          </p>
+        </div>
+        <AuthWidget />
+      </header>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !running && run()}
+          placeholder="https://…"
+          className="flex-1 rounded-xl border border-white/10 bg-ink-soft px-4 py-3 text-sm outline-none placeholder:text-white/25 focus:border-melon/60"
+        />
+        <button
+          onClick={run}
+          disabled={running || !url}
+          className="rounded-xl bg-melon px-6 py-3 text-sm font-semibold text-black transition-opacity disabled:opacity-40"
+        >
+          {running ? "Forging…" : "Generate ads"}
+        </button>
       </div>
 
       <main className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6 pt-6 pb-16">

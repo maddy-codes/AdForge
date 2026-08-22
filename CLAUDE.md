@@ -69,3 +69,17 @@ npm run lint     # ESLint
 - Confirm fal and Pioneer usage are called out explicitly in the submission form (both have side challenges).
 - README must list every API/framework and include setup steps from a clean clone.
 - Tavily promo code: `AugustLondon` (8k top-up). fal promo: `techeuropexfal-london`.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

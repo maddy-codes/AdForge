@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Outfit, Sora } from "next/font/google";
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
+import ConvexClientProvider from "./ConvexClientProvider";
 import "./globals.css";
 
 const display = Sora({
@@ -39,5 +41,12 @@ export default function RootLayout({
         {children}
       </body>
     </html>
+    <ConvexAuthNextjsServerProvider>
+      <html lang="en">
+        <body className="min-h-screen antialiased">
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </body>
+      </html>
+    </ConvexAuthNextjsServerProvider>
   );
 }
