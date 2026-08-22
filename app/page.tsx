@@ -2,19 +2,33 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import AppShell, { MODES } from "./components/AppShell";
 import IntroSplash from "./components/IntroSplash";
 import AuthForm from "./components/AuthForm";
 import { useSessionGate } from "./components/useSessionGate";
 
 export default function Home() {
-  const { isLoaded, isIn } = useSessionGate();
+  const router = useRouter();
+  const { isLoaded, isIn, isSignedIn } = useSessionGate();
   const [intro, setIntro] = useState(true);
   const endIntro = useCallback(() => setIntro(false), []);
 
   useEffect(() => {
     if (isIn) setIntro(false);
   }, [isIn]);
+
+  // New signed-in users go through onboarding once (guests skip it — the
+  // demo path stays auth-free). `undefined` means the query is still loading.
+  const brand = useQuery(api.brands.get, isSignedIn ? {} : "skip");
+  const needsOnboarding =
+    isSignedIn && brand !== undefined && (!brand || !brand.onboardedAt);
+
+  useEffect(() => {
+    if (needsOnboarding) router.replace("/onboarding");
+  }, [needsOnboarding, router]);
 
   return (
     <>
@@ -34,7 +48,11 @@ export default function Home() {
                 <AuthForm />
               </div>
             )}
-            {isLoaded && isIn && <Landing />}
+            {isLoaded && isIn && !needsOnboarding && (
+              // Hold the landing back while we don't yet know if this signed-in
+              // user has finished onboarding (brand === undefined → loading).
+              (!isSignedIn || brand !== undefined) && <Landing />
+            )}
           </>
         )}
       </AppShell>

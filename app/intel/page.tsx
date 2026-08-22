@@ -99,14 +99,18 @@ export default function IntelPage() {
             <p className="mb-3 font-display text-[11px] font-semibold tracking-wide text-muted uppercase">
               Rivals we pulled ads from
             </p>
-            <ul className="flex flex-wrap gap-2">
+            <ul className="grid gap-3 sm:grid-cols-3">
               {result.rivals.map((r) => (
                 <li
                   key={r.name}
-                  className="rounded-full bg-ink px-3 py-1.5 text-sm text-mint"
-                  title={r.angle}
+                  className="rounded-2xl border border-hairline bg-surface p-4"
                 >
-                  {r.name}
+                  <p className="inline-flex rounded-full bg-ink px-3 py-1 font-display text-sm font-semibold text-mint">
+                    {r.name}
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-muted">
+                    {r.angle}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -135,7 +139,27 @@ export default function IntelPage() {
                 >
                   {f.sourceTitle}
                 </a>
-                <pre className="mt-4 flex-1 overflow-auto rounded-2xl bg-canvas p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink">
+                {f.structure?.length > 0 && (
+                  <div className="mt-4">
+                    <p className="font-display text-[11px] font-semibold tracking-wide text-muted uppercase">
+                      The formula
+                    </p>
+                    <ol className="mt-2 space-y-1.5">
+                      {f.structure.map((beat, i) => (
+                        <li key={beat} className="flex gap-2 text-xs leading-relaxed">
+                          <span className="font-display font-bold text-coral">
+                            {i + 1}
+                          </span>
+                          <span>{beat}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                <p className="mt-4 font-display text-[11px] font-semibold tracking-wide text-muted uppercase">
+                  Prompt for your product
+                </p>
+                <pre className="mt-2 flex-1 overflow-auto rounded-2xl bg-canvas p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-ink">
                   {f.prompt}
                 </pre>
                 <div className="mt-4 flex flex-col gap-2">
