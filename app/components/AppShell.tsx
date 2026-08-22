@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import AuthWidget from "./AuthWidget";
+import { useSessionGate } from "./useSessionGate";
 
 export const MODES = [
   {
@@ -31,11 +32,14 @@ export const MODES = [
 export default function AppShell({
   children,
   status = "Ready",
+  quiet = false,
 }: {
   children: React.ReactNode;
   status?: string;
+  quiet?: boolean;
 }) {
   const path = usePathname();
+  const { isIn } = useSessionGate();
 
   return (
     <div className="relative overflow-hidden">
@@ -47,45 +51,57 @@ export default function AppShell({
       </div>
 
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6 pt-6 pb-16">
-        <nav className="mb-10 flex flex-wrap items-center justify-between gap-4">
+        <nav
+          className={`mb-6 flex flex-wrap items-center justify-between gap-4 ${
+            quiet ? "opacity-0" : "rise"
+          }`}
+        >
           <Link href="/" className="font-display text-xl font-semibold tracking-tight">
             AdForge
             <span className="ml-1 inline-block h-2 w-2 rounded-full bg-coral" />
           </Link>
-          <div className="flex flex-wrap items-center gap-2">
-            {MODES.map((m) => {
-              const on = path === m.href;
-              return (
-                <Link
-                  key={m.href}
-                  href={m.href}
-                  className={`rounded-full px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide uppercase ${
-                    on
-                      ? "bg-ink text-mint"
-                      : "bg-surface text-muted hover:text-ink"
-                  }`}
-                >
-                  {m.label}
-                </Link>
-              );
-            })}
-            <span className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
-              {status}
-            </span>
-            <AuthWidget />
-          </div>
+          {isIn && (
+            <div className="flex flex-wrap items-center gap-2">
+              {MODES.map((m) => {
+                const on = path === m.href;
+                return (
+                  <Link
+                    key={m.href}
+                    href={m.href}
+                    className={`rounded-full px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide uppercase ${
+                      on
+                        ? "bg-ink text-mint"
+                        : "bg-surface text-muted hover:text-ink"
+                    }`}
+                  >
+                    {m.label}
+                  </Link>
+                );
+              })}
+              <span className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
+                {status}
+              </span>
+              <AuthWidget />
+            </div>
+          )}
         </nav>
 
         <div className="flex flex-1 flex-col">{children}</div>
 
-        <footer className="mt-20 flex flex-col items-center gap-2 pt-6 text-center">
-          <p className="font-display text-[12px] font-semibold tracking-wide text-muted uppercase">
-            Pioneer · Tavily · fal · OpenAI · VEED
-          </p>
-          <p className="text-[11px] tracking-wide text-muted/70 uppercase">
-            {"{Tech: Europe}"} × VEED Hackathon — London
-          </p>
-        </footer>
+        {isIn && (
+          <footer
+            className={`mt-20 flex flex-col items-center gap-2 pt-6 text-center ${
+              quiet ? "opacity-0" : "rise"
+            }`}
+          >
+            <p className="font-display text-[12px] font-semibold tracking-wide text-muted uppercase">
+              Pioneer · Tavily · fal · OpenAI · VEED
+            </p>
+            <p className="text-[11px] tracking-wide text-muted/70 uppercase">
+              {"{Tech: Europe}"} × VEED Hackathon — London
+            </p>
+          </footer>
+        )}
       </div>
     </div>
   );
