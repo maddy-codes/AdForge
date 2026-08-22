@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.auth-keys.json
 
 # Dependencies
 node_modules/

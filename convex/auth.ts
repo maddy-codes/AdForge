@@ -3,10 +3,11 @@ import { Password } from "@convex-dev/auth/providers/Password";
 import { Anonymous } from "@convex-dev/auth/providers/Anonymous";
 
 /**
- * Quick auth for the demo. Two providers:
- *  - Anonymous: zero-friction "sign in" so a judge can save/replay a run
- *    without creating an account.
- *  - Password: email + password, for the team's own accounts.
+ * Optional auth for saved forge history. Providers:
+ *  - Password: email + password at `/auth`
+ *  - Anonymous: "Skip — save as guest" on the same page, for judges
+ *
+ * Never gates `/forge` / `/intel` / `/avatar`.
  */
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [Password, Anonymous],

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -14,7 +15,9 @@ export default function AuthWidget() {
   return (
     <div className="text-xs">
       <AuthLoading>
-        <span className="text-white/30">…</span>
+        <span className="rounded-full bg-surface px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-muted/50 uppercase">
+          …
+        </span>
       </AuthLoading>
       <Unauthenticated>
         <SignedOut />
@@ -26,42 +29,45 @@ export default function AuthWidget() {
   );
 }
 
+const pill =
+  "rounded-full px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide uppercase";
+
 function SignedOut() {
-  const { signIn } = useAuthActions();
-  const [busy, setBusy] = useState(false);
+  const path = usePathname();
+  const on = path === "/auth";
 
   return (
-    <button
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await signIn("anonymous");
-        } finally {
-          setBusy(false);
-        }
-      }}
-      disabled={busy}
-      className="rounded-full border border-white/15 px-3 py-1.5 text-white/60 transition-colors hover:border-white/30 hover:text-white disabled:opacity-40"
+    <Link
+      href="/auth"
+      className={`${pill} ${
+        on ? "bg-ink text-mint" : "border border-hairline bg-surface text-ink hover:bg-ink hover:text-mint"
+      }`}
     >
-      {busy ? "Signing in…" : "Save my runs"}
-    </button>
+      Sign in
+    </Link>
   );
 }
 
 function SignedIn() {
   const { signOut } = useAuthActions();
+  const path = usePathname();
   const history = useQuery(api.generations.list);
+  const onRuns = path === "/runs";
+  const count = history?.length ?? 0;
 
   return (
-    <div className="flex items-center gap-3">
-      {history !== undefined && (
-        <span className="text-white/40">
-          {history.length} saved run{history.length === 1 ? "" : "s"}
-        </span>
-      )}
+    <div className="flex items-center gap-2">
+      <Link
+        href="/runs"
+        className={`${pill} ${
+          onRuns ? "bg-ink text-mint" : "bg-surface text-muted hover:text-ink"
+        }`}
+      >
+        Runs{history !== undefined ? ` · ${count}` : ""}
+      </Link>
       <button
         onClick={() => void signOut()}
-        className="rounded-full border border-white/15 px-3 py-1.5 text-white/60 transition-colors hover:border-white/30 hover:text-white"
+        className={`${pill} border border-hairline bg-surface text-muted hover:text-ink`}
       >
         Sign out
       </button>

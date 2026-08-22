@@ -97,14 +97,18 @@ in to see it work.
 - **Backend:** Convex, running as a free local anonymous deployment (no
   account needed — see above). `convex/schema.ts` defines a `generations`
   table alongside Convex Auth's own user tables.
-- **Auth:** `@convex-dev/auth`, two providers — `Anonymous` (the "Save my
-  runs" button, top right, zero friction) and `Password` (real accounts).
-  `middleware.ts` only refreshes the session cookie; it never redirects, so
-  signed-out traffic is unaffected.
-- **What gets saved:** after a run finishes, `app/page.tsx` calls the
-  `generations.save` mutation with the raw NDJSON event log. Signed out, the
-  mutation is a no-op (`convex/generations.ts`). Signed in, it's replayable
-  history without re-calling any partner API.
+- **Auth:** `@convex-dev/auth`, two providers — `Password` (email accounts at
+  `/auth`) and `Anonymous` ("Skip — save as guest", zero friction for judges).
+  The nav "Sign in" pill never blocks a route. `middleware.ts` only refreshes
+  the session cookie.
+- **What gets saved:** after a brand-film run finishes, `app/forge/page.tsx`
+  calls `generations.save` with the raw NDJSON event log. Signed out, the
+  mutation is a no-op (`convex/generations.ts`). Signed in, history lives at
+  `/runs`.
+- **Keys:** `JWT_PRIVATE_KEY`, `JWKS`, and `SITE_URL` are Convex deployment
+  env vars (not `.env.local`). After `npx convex login`, run
+  `npm run auth:keys` (optional `SITE_URL=http://localhost:3001`). Never run
+  the interactive `npx @convex-dev/auth` wizard — it hangs without a TTY.
 
 ## Demo product
 
