@@ -51,6 +51,12 @@ export const renderStatusValidator = v.union(
   v.literal("failed")
 );
 
+export const assetKindValidator = v.union(
+  v.literal("product"),
+  v.literal("logo"),
+  v.literal("other")
+);
+
 export default defineSchema({
   // One row per pipeline run.
   jobs: defineTable({
@@ -113,4 +119,25 @@ export default defineSchema({
     url: v.string(),
     loraId: v.string(),
   }).index("by_url", ["url"]),
+
+  // Onboarding profile — one per signed-in user (Clerk subject, matching
+  // jobs/generations). `onboardedAt` unset means the wizard isn't finished.
+  brands: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    productUrl: v.optional(v.string()),
+    tone: v.optional(v.string()),
+    onboardedAt: v.optional(v.number()),
+  }).index("by_user", ["userId"]),
+
+  // Uploaded brand assets. The file lives in Convex storage — only the
+  // storageId is stored here; signed URLs are minted on read.
+  assets: defineTable({
+    userId: v.string(),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    kind: assetKindValidator,
+  }).index("by_user", ["userId"]),
 });

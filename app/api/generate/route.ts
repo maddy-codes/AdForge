@@ -14,6 +14,8 @@ import { parseBrief, type AdBrief } from "@/lib/brief";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+type BrandAssets = { urls: string[]; cacheKey: string } | null;
+
 /**
  * Async job kickoff. The response is just `{ jobId }` — the pipeline keeps
  * running server-side (via `after()`) and writes every transition to Convex,
@@ -34,13 +36,24 @@ export async function POST(req: NextRequest) {
   // Only job creation is auth-aware (attaches the run to a signed-in user's
   // history); the background workers authenticate with the job token alone.
   const convex = getConvexServer();
-  const authToken = await auth()
-    .then(({ getToken }) => getToken({ template: "convex" }))
+  const session = await auth().catch(() => null);
+  const authToken = await session
+    ?.getToken({ template: "convex" })
     .catch(() => undefined);
   if (authToken) convex.setAuth(authToken);
   const jobId = await convex.mutation(api.jobs.create, { url, token });
 
-  after(() => runPipeline(jobId, token, url, brief));
+  // Signed-in users with an asset library train the LoRA on their stored
+  // shots (cached per brand) instead of re-scraping the page every run.
+  let brandAssets: BrandAssets = null;
+  if (authToken && session?.userId) {
+    const urls = await convex.query(api.assets.forTraining, {}).catch(() => []);
+    if (urls.length) {
+      brandAssets = { urls, cacheKey: `brand:${session.userId}` };
+    }
+  }
+
+  after(() => runPipeline(jobId, token, url, brief, brandAssets));
 
   return NextResponse.json({ jobId }, { status: 202 });
 }
@@ -55,6 +68,7 @@ async function runPipeline(
   token: string,
   url: string,
   brief?: AdBrief,
+  brandAssets: BrandAssets = null,
 ) {
   const convex = getConvexServer();
   const job = { jobId, token };
@@ -68,7 +82,10 @@ async function runPipeline(
     // D3: training starts the moment we have images and runs alongside
     // everything below; it reports to the job the instant it settles.
     await convex.mutation(api.jobs.stageRunning, { ...job, stage: "lora" });
-    const loraPromise: Promise<LoraResult> = trainLora(url, facts.imageUrls)
+    const loraPromise: Promise<LoraResult> = trainLora(
+      brandAssets?.cacheKey ?? url,
+      brandAssets?.urls ?? facts.imageUrls
+    )
       .then(async (result) => {
         await convex.mutation(api.jobs.recordLora, {
           ...job,

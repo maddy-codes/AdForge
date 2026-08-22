@@ -39,7 +39,7 @@ export default function AppShell({
   quiet?: boolean;
 }) {
   const path = usePathname();
-  const { isIn } = useSessionGate();
+  const { isIn, isSignedIn } = useSessionGate();
 
   return (
     <div className="relative overflow-hidden">
@@ -78,6 +78,18 @@ export default function AppShell({
                   </Link>
                 );
               })}
+              {isSignedIn && (
+                <Link
+                  href="/assets"
+                  className={`rounded-full px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide uppercase ${
+                    path === "/assets"
+                      ? "bg-ink text-mint"
+                      : "bg-surface text-muted hover:text-ink"
+                  }`}
+                >
+                  Assets
+                </Link>
+              )}
               <span className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
                 {status}
               </span>

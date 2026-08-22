@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as assets from "../assets.js";
+import type * as brands from "../brands.js";
 import type * as generations from "../generations.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
@@ -20,6 +22,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  assets: typeof assets;
+  brands: typeof brands;
   generations: typeof generations;
   http: typeof http;
   jobs: typeof jobs;
