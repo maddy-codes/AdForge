@@ -1,13 +1,28 @@
-import { convexAuthNextjsMiddleware } from "@convex-dev/auth/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-/**
- * Auth is optional everywhere. This app has exactly one page (`/`) and it
- * must keep working for a signed-out judge (CLAUDE.md: "no auth" on the demo
- * path) — so the middleware only refreshes the auth cookie, it never
- * redirects or blocks a route.
- */
-export default convexAuthNextjsMiddleware();
+const isPublic = createRouteMatcher([
+  "/",
+  "/sso-callback(.*)",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/api/generate",
+  "/api/intel",
+  "/api/avatar",
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isPublic(req)) return;
+  if (req.cookies.get("adforge_guest")?.value === "1") return;
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+});
 
 export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: [
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)(.*)",
+  ],
 };

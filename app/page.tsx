@@ -1,11 +1,50 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import AppShell, { MODES } from "./components/AppShell";
+import IntroSplash from "./components/IntroSplash";
+import AuthForm from "./components/AuthForm";
+import { useSessionGate } from "./components/useSessionGate";
 
 export default function Home() {
+  const { isLoaded, isIn } = useSessionGate();
+  const [intro, setIntro] = useState(true);
+  const endIntro = useCallback(() => setIntro(false), []);
+
+  useEffect(() => {
+    if (isIn) setIntro(false);
+  }, [isIn]);
+
   return (
-    <AppShell>
+    <>
+      {intro && <IntroSplash onDone={endIntro} />}
+      <AppShell quiet={intro}>
+        {!intro && (
+          <>
+            {!isLoaded && (
+              <div className="flex flex-1 items-center justify-center">
+                <p className="font-display text-sm font-semibold tracking-wide text-muted uppercase">
+                  …
+                </p>
+              </div>
+            )}
+            {isLoaded && !isIn && (
+              <div className="flex flex-1 items-center justify-center">
+                <AuthForm />
+              </div>
+            )}
+            {isLoaded && isIn && <Landing />}
+          </>
+        )}
+      </AppShell>
+    </>
+  );
+}
+
+function Landing() {
+  return (
+    <>
       <header className="rise mb-12 max-w-3xl">
         <p className="mb-4 inline-flex rounded-full bg-ink px-3 py-1 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
           Pick what you want to make
@@ -46,6 +85,6 @@ export default function Home() {
           </Link>
         ))}
       </div>
-    </AppShell>
+    </>
   );
 }

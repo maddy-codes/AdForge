@@ -176,6 +176,82 @@ body {
   animation: shimmer-sweep 1.8s ease-in-out infinite;
 }
 
+.intro-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: hidden;
+  background: var(--color-canvas);
+}
+
+.intro-orb {
+  animation: intro-orb-land 0.9s cubic-bezier(0.22, 1.15, 0.36, 1) both;
+}
+
+.intro-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--color-ink);
+  transform: translate(-50%, -50%);
+  animation: intro-mark-in 0.55s 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.intro-splash.is-exiting {
+  animation: intro-veil 0.5s ease forwards;
+}
+
+.intro-splash.is-exiting .intro-mark {
+  animation: intro-mark-out 0.35s ease forwards;
+}
+
+@keyframes intro-orb-land {
+  0% {
+    transform: translateY(-42vh);
+    opacity: 0;
+  }
+  62% {
+    transform: translateY(14px);
+    opacity: 1;
+  }
+  82% {
+    transform: translateY(-6px);
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes intro-mark-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes intro-mark-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% - 8px));
+  }
+}
+
+@keyframes intro-veil {
+  to {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rise,
   .pulse-ring,
@@ -183,7 +259,10 @@ body {
   .float-b,
   .float-c,
   .bob,
-  .shimmer::after {
+  .shimmer::after,
+  .intro-orb,
+  .intro-mark,
+  .intro-splash.is-exiting {
     animation: none;
   }
 }
