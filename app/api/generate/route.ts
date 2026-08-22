@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse, after } from "next/server";
-import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { getConvexServer } from "@/lib/convexServer";
@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
   // Only job creation is auth-aware (attaches the run to a signed-in user's
   // history); the background workers authenticate with the job token alone.
   const convex = getConvexServer();
-  const authToken = await convexAuthNextjsToken().catch(() => undefined);
+  const authToken = await auth()
+    .then(({ getToken }) => getToken({ template: "convex" }))
+    .catch(() => undefined);
   if (authToken) convex.setAuth(authToken);
   const jobId = await convex.mutation(api.jobs.create, { url, token });
 

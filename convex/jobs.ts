@@ -1,5 +1,9 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import {
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import schema, {
@@ -27,6 +31,12 @@ const stageNameValidator = v.union(
 
 const PENDING = { status: "pending" as const };
 
+/** Clerk subject of the signed-in caller, or null. Matches generations.ts. */
+async function clerkUserId(ctx: QueryCtx | MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  return identity?.subject ?? null;
+}
+
 async function requireJob(
   ctx: MutationCtx,
   jobId: Id<"jobs">,
@@ -42,7 +52,7 @@ export const create = mutation({
   args: { url: v.string(), token: v.string() },
   returns: v.id("jobs"),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await clerkUserId(ctx);
     return ctx.db.insert("jobs", {
       url: args.url,
       token: args.token,
@@ -292,7 +302,7 @@ export const history = query({
     })
   ),
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await clerkUserId(ctx);
     if (!userId) return [];
     const jobs = await ctx.db
       .query("jobs")

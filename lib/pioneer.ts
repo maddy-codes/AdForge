@@ -46,17 +46,21 @@ export async function extractEntities(
   return normalizeResult(data.result, entityNames);
 }
 
-/** Unwrap a response that nests spans under an `entities` key instead of being flat. */
+/** Unwrap nesting — live API returns spans under `result.data.entities`, not flat. */
 function unwrapEntities(
   result: EncoderInferenceResponse["result"]
 ): EncoderInferenceResponse["result"] {
-  if (
-    !Array.isArray(result) &&
-    result &&
-    typeof result === "object" &&
-    "entities" in result
-  ) {
-    return (result as { entities: EncoderInferenceResponse["result"] }).entities;
+  if (!Array.isArray(result) && result && typeof result === "object") {
+    if ("data" in result) {
+      return unwrapEntities(
+        (result as { data: EncoderInferenceResponse["result"] }).data
+      );
+    }
+    if ("entities" in result) {
+      return unwrapEntities(
+        (result as { entities: EncoderInferenceResponse["result"] }).entities
+      );
+    }
   }
   return result;
 }

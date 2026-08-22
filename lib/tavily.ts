@@ -29,18 +29,24 @@ async function post<T>(path: string, body: object): Promise<T> {
 
 export type TavilyExtractResult = {
   url: string;
+  title: string;
   rawContent: string;
   imageUrls: string[];
 };
 
 export async function extractPage(url: string): Promise<TavilyExtractResult> {
   const data = await post<{
-    results: { url: string; raw_content: string; images?: string[] }[];
+    results: { url: string; title?: string; raw_content: string; images?: string[] }[];
   }>("/extract", { urls: [url], include_images: true, extract_depth: "advanced" });
 
   const hit = data.results[0];
   if (!hit) throw new Error(`Tavily extract returned no results for ${url}`);
-  return { url: hit.url, rawContent: hit.raw_content, imageUrls: hit.images ?? [] };
+  return {
+    url: hit.url,
+    title: hit.title ?? "",
+    rawContent: hit.raw_content,
+    imageUrls: hit.images ?? [],
+  };
 }
 
 export type TavilySearchResult = {

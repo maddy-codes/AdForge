@@ -52,15 +52,14 @@ export const renderStatusValidator = v.union(
 );
 
 export default defineSchema({
-  ...authTables,
-
   // One row per pipeline run.
   jobs: defineTable({
     url: v.string(),
     // Per-job write bearer, minted by the server route and never sent to the
     // browser (`watch` strips it). Guards every worker mutation.
     token: v.string(),
-    userId: v.optional(v.id("users")),
+    // Clerk subject of the signed-in creator; absent on anonymous runs.
+    userId: v.optional(v.string()),
     status: v.union(
       v.literal("running"),
       v.literal("done"),
@@ -80,7 +79,9 @@ export default defineSchema({
     error: v.optional(v.string()),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
-export default defineSchema({
+  }).index("by_user", ["userId"]),
+
+  // Saved-run history for signed-in users, keyed by Clerk subject.
   generations: defineTable({
     userId: v.string(),
     url: v.string(),
