@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import PipelineSteps from "./components/PipelineSteps";
 import AdCard from "./components/AdCard";
+import AuthWidget from "./components/AuthWidget";
 import { DEMO_URL } from "@/lib/stages/extract";
 import type {
   Concept,
@@ -17,6 +20,7 @@ import type {
 type Card = { index: number; concept: Concept; result: RenderResult };
 
 export default function Home() {
+  const saveGeneration = useMutation(api.generations.save);
   const [url, setUrl] = useState(DEMO_URL);
   const [running, setRunning] = useState(false);
   const [statuses, setStatuses] = useState<Partial<Record<Stage, StageStatus>>>(
@@ -84,6 +88,9 @@ export default function Home() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      const collected: PipelineEvent[] = [];
+      let productName: string | undefined;
+      let finalElapsed: number | undefined;
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -92,8 +99,24 @@ export default function Home() {
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
-          if (line.trim()) apply(JSON.parse(line) as PipelineEvent);
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as PipelineEvent;
+          apply(event);
+          collected.push(event);
+          if (event.type === "facts") productName = event.facts.name;
+          if (event.type === "done") finalElapsed = event.elapsedMs;
         }
+      }
+
+      // Save the run for a signed-in user; a no-op mutation when signed out
+      // (see convex/generations.ts). Never blocks or gates the demo itself.
+      if (finalElapsed !== undefined) {
+        void saveGeneration({
+          url,
+          productName,
+          elapsedMs: finalElapsed,
+          events: collected,
+        }).catch(() => {});
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -104,14 +127,17 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-14">
-      <header className="mb-10">
-        <h1 className="text-4xl font-semibold tracking-tight">
-          Ad<span className="text-melon">Forge</span>
-        </h1>
-        <p className="mt-2 max-w-xl text-white/50">
-          Paste a product URL. Get on-brand short-form ads written around what
-          real customers actually praise. Minutes, not weeks.
-        </p>
+      <header className="mb-10 flex items-start justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-semibold tracking-tight">
+            Ad<span className="text-melon">Forge</span>
+          </h1>
+          <p className="mt-2 max-w-xl text-white/50">
+            Paste a product URL. Get on-brand short-form ads written around
+            what real customers actually praise. Minutes, not weeks.
+          </p>
+        </div>
+        <AuthWidget />
       </header>
 
       <div className="flex flex-col gap-3 sm:flex-row">
