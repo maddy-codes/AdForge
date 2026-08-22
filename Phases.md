@@ -88,27 +88,35 @@ owned by Taran per `AdForge_Team_Role_Division.md`).
 
 | Subtask | Status |
 |---|---|
-| Structured-output call turning `facts + hooks` into 3 concepts | ⬜ `TODO(O)` in `lib/stages/concepts.ts:61` |
-| Enforce verbatim review-quote inclusion in scripts (the whole point of the Tavily stage) | ⬜ not started |
-| Wire real `OPENAI_API_KEY` | ⬜ blocked on key |
+| Structured-output call turning `facts + hooks` into 3 concepts | ✅ `chat.completions.parse` + `zodResponseFormat`, `gpt-4o` — `lib/stages/concepts.ts:directConcepts` |
+| Enforce verbatim review-quote inclusion in scripts (the whole point of the Tavily stage) | ✅ prompted + backstopped by `ensureVerbatimQuote` |
+| Wire real `OPENAI_API_KEY` | ✅ key set, `concepts()` falls back to mock on missing key or API failure |
+
+**Phase 4 code complete.** `npm install` was needed to sync `node_modules` with the
+`openai`/`zod` deps already in `package.json` (lockfile had them, install hadn't been run) —
+`tsc --noEmit` and `next lint` are now both clean.
 
 ---
 
-## Phase 5 — GLiNER2 fine-tune via Pioneer (D9 step 4 — last, has a working fallback)
+## Phase 5 — GLiNER2 fine-tune via Pioneer (D9 step 4 — last, has a working fallback) ✅
 
 **Maps to:** PRD "M — ML/extraction lead"; DECISIONS D4.
 
 | Subtask | Status |
 |---|---|
-| Scrape ~150 product pages for synthetic training data | ⬜ not started |
-| Label once with OpenAI | ⬜ not started |
-| Fine-tune `fastino/gliner2-base-v1` via Pioneer | ⬜ not started |
-| Benchmark vs plain LLM call (latency/cost/accuracy slide for the side-challenge story) | ⬜ not started |
-| Zero-shot schema-driven GLiNER2 fallback if fine-tune doesn't converge by the 15:00 gate | ⬜ not started (currently `extract()` just returns mock, no GLiNER2 call of any kind yet) |
-| Wire real `PIONEER_API_KEY` | ⬜ blocked on key |
+| Scrape ~150 product pages for synthetic training data | ⬜ skipped by design — D4 gate went straight to fallback |
+| Label once with OpenAI | ⬜ skipped by design |
+| Fine-tune `fastino/gliner2-base-v1` via Pioneer | ⬜ skipped by design |
+| Benchmark vs plain LLM call (latency/cost/accuracy slide for the side-challenge story) | ⬜ not started (needs the fine-tune above; drop from the pitch) |
+| Zero-shot schema-driven GLiNER2 fallback if fine-tune doesn't converge by the 15:00 gate | ✅ wired — `lib/pioneer.ts:extractEntities` + `lib/stages/extract.ts:extractFacts`, called on Tavily's scraped page text, field-by-field fallback to mock on any miss |
+| Wire real `PIONEER_API_KEY` | ✅ key set, request verified correct against live API (endpoint/auth/schema all confirmed — got `403 payment_method_required`, not an auth/shape error); goes fully live once a card's on the Pioneer account at agent.pioneer.ai/billing |
 
-**Correctly last per D9** — it has the only pure fallback (mock data) that costs nothing if
-skipped entirely; time pressure should sacrifice this before Phase 2–4.
+**D4 hard gate invoked deliberately, not from time pressure** — went straight to the
+zero-shot fallback instead of the scrape/label/fine-tune pipeline, since that pipeline needs
+real training data and hours of offline work with no Pioneer fine-tune docs in hand. `extract()`
+now calls real GLiNER2 zero-shot over live Tavily page text; every field still falls back
+independently to mock if the model misses it or the API errors. Blocked only on billing —
+once a card/promo is on the Pioneer account, this goes fully live with no code changes.
 
 ---
 
@@ -158,7 +166,9 @@ never gates the core demo, which must work fully signed-out.
 
 ## Where we actually are, in one line
 
-**Phases 0–3 are done.** All 4 keys are set, Phase 1 (mocked pipeline) is done, Phase 2
-(fal LoRA + render) and Phase 3 (Tavily extract + reviews) are wired to real APIs.
-Phase 4 (OpenAI creative director) is next, per D9's ranked build order — `concepts.ts`
-still returns `getMockConcepts()` unconditionally.
+**Phases 0–5 are code-complete.** All 4 keys are set, Phase 1 (mocked pipeline) is done,
+and Phases 2–5 (fal LoRA + render, Tavily extract + reviews, OpenAI creative director,
+GLiNER2 zero-shot via Pioneer) are all wired to real APIs with per-field mock fallback on
+missing key, model miss, or API failure. Pioneer needs a payment method added on their
+dashboard before its calls return live data — everything else is ready for a real end-to-end
+run (Phase 7).

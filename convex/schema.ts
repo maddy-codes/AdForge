@@ -3,24 +3,107 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 /**
- * Auth + a thin persistence layer on top of the mocked pipeline.
+ * Pipeline state lives here, not in an in-flight HTTP stream. `/api/generate`
+ * creates a `jobs` row, returns its id immediately, and the pipeline writes
+ * every stage transition to Convex; the UI is a reactive subscription.
  *
- * CLAUDE.md and DECISIONS.md D8 both say "one product, one run, no auth, no
- * persistence" for the demo path — the URL -> ad gallery flow must keep
- * working with zero sign-in. This schema is an optional layer: a signed-in
- * user's runs get saved to `generations` so they have a history; an anonymous
- * demo run just never writes a row. Never gate rendering itself on auth.
+ * The demo path stays auth-free (CLAUDE.md / DECISIONS.md D8): anonymous runs
+ * simply have no `userId`. Signing in only adds a saved history.
  */
+
+export const stageStatusValidator = v.union(
+  v.literal("pending"),
+  v.literal("running"),
+  v.literal("done"),
+  v.literal("failed"),
+  v.literal("skipped")
+);
+
+export const stageStateValidator = v.object({
+  status: stageStatusValidator,
+  detail: v.optional(v.string()),
+});
+
+export const factsValidator = v.object({
+  name: v.string(),
+  price: v.string(),
+  features: v.array(v.string()),
+  materials: v.array(v.string()),
+  category: v.string(),
+  tone: v.string(),
+  imageUrls: v.array(v.string()),
+});
+
+export const hookValidator = v.object({
+  quote: v.string(),
+  theme: v.string(),
+});
+
+export const conceptValidator = v.object({
+  hook: v.string(),
+  script: v.string(),
+  shots: v.array(v.string()),
+});
+
+export const renderStatusValidator = v.union(
+  v.literal("queued"),
+  v.literal("rendering"),
+  v.literal("done"),
+  v.literal("failed")
+);
+
 export default defineSchema({
   ...authTables,
 
-  generations: defineTable({
-    userId: v.id("users"),
+  // One row per pipeline run.
+  jobs: defineTable({
     url: v.string(),
-    productName: v.optional(v.string()),
-    elapsedMs: v.optional(v.number()),
-    // Raw NDJSON pipeline events, for replaying a past run in the gallery
-    // without re-calling any partner API.
-    events: v.array(v.any()),
+    // Per-job write bearer, minted by the server route and never sent to the
+    // browser (`watch` strips it). Guards every worker mutation.
+    token: v.string(),
+    userId: v.optional(v.id("users")),
+    status: v.union(
+      v.literal("running"),
+      v.literal("done"),
+      v.literal("failed")
+    ),
+    stages: v.object({
+      extract: stageStateValidator,
+      reviews: stageStateValidator,
+      concepts: stageStateValidator,
+      lora: stageStateValidator,
+      render: stageStateValidator,
+    }),
+    facts: v.optional(factsValidator),
+    hooks: v.optional(v.array(hookValidator)),
+    loraId: v.optional(v.string()),
+    loraCached: v.optional(v.boolean()),
+    error: v.optional(v.string()),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
   }).index("by_user", ["userId"]),
+
+  // One row per concept render. A child table (not an array on the job) so
+  // the concurrent render workers each patch their own document — no
+  // write contention, no 1MB-document creep.
+  renders: defineTable({
+    jobId: v.id("jobs"),
+    index: v.number(),
+    concept: conceptValidator,
+    status: renderStatusValidator,
+    videoUrl: v.optional(v.string()),
+    keyframeUrl: v.optional(v.string()),
+    genericKeyframeUrl: v.optional(v.string()),
+    usedLora: v.optional(v.boolean()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+  }).index("by_job_and_index", ["jobId", "index"]),
+
+  // Trained brand LoRA per product URL — replaces the `.lora-cache` disk
+  // folder, so warm runs skip training on every machine, not just this one.
+  loras: defineTable({
+    url: v.string(),
+    loraId: v.string(),
+  }).index("by_url", ["url"]),
 });

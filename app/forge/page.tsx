@@ -1,21 +1,15 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import PipelineSteps from "../components/PipelineSteps";
 import AdCard from "../components/AdCard";
 import AppShell from "../components/AppShell";
 import { DEMO_URL } from "@/lib/stages/extract";
-import type {
-  Concept,
-  PipelineEvent,
-  RenderResult,
-  ReviewHook,
-  Stage,
-  StageStatus,
-} from "@/lib/types";
+import type { Concept, RenderResult, Stage, StageStatus } from "@/lib/types";
 
 type Card = { index: number; concept: Concept; result: RenderResult };
 
@@ -23,69 +17,65 @@ const SLOTS = [0, 1, 2];
 
 function ForgeInner() {
   const params = useSearchParams();
-  const saveGeneration = useMutation(api.generations.save);
   const [url, setUrl] = useState(params.get("url") || DEMO_URL);
-  const [running, setRunning] = useState(false);
-  const [statuses, setStatuses] = useState<Partial<Record<Stage, StageStatus>>>(
-    {}
+  // Re-attach to a live run after a refresh: the job id rides the URL and
+  // all state comes back through the subscription below.
+  const [jobId, setJobId] = useState<Id<"jobs"> | null>(
+    (params.get("job") as Id<"jobs"> | null) ?? null
   );
-  const [details, setDetails] = useState<Partial<Record<Stage, string>>>({});
-  const [hooks, setHooks] = useState<ReviewHook[]>([]);
-  const [cards, setCards] = useState<Card[]>([]);
-  const [elapsed, setElapsed] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [liveMs, setLiveMs] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+
+  const snapshot = useQuery(api.jobs.watch, jobId ? { jobId } : "skip");
+  const job = snapshot?.job;
+  const renders = snapshot?.renders ?? [];
+
+  const running = submitting || job?.status === "running";
+  const startedAt = job?.startedAt;
 
   useEffect(() => {
-    if (!running) return;
-    const t0 = Date.now();
-    const id = setInterval(() => setLiveMs(Date.now() - t0), 100);
+    if (!running || startedAt === undefined) return;
+    const id = setInterval(
+      () => setLiveMs(Math.max(0, Date.now() - startedAt)),
+      100
+    );
     return () => clearInterval(id);
-  }, [running]);
+  }, [running, startedAt]);
 
-  function apply(event: PipelineEvent) {
-    switch (event.type) {
-      case "stage":
-        setStatuses((s) => ({ ...s, [event.stage]: event.status }));
-        if (event.detail)
-          setDetails((d) => ({ ...d, [event.stage]: event.detail }));
-        break;
-      case "facts":
-      case "concepts":
-        break;
-      case "hooks":
-        setHooks(event.hooks);
-        break;
-      case "video":
-        setCards((c) => [
-          ...c,
-          { index: event.index, concept: event.concept, result: event.result },
-        ]);
-        break;
-      case "lora":
-        setDetails((d) => ({
-          ...d,
-          lora: event.cached ? "cached — hot" : "trained",
-        }));
-        break;
-      case "done":
-        setElapsed(event.elapsedMs);
-        break;
-      case "error":
-        setError(event.message);
-        break;
+  const statuses: Partial<Record<Stage, StageStatus>> = {};
+  const details: Partial<Record<Stage, string>> = {};
+  if (job) {
+    for (const [stage, state] of Object.entries(job.stages)) {
+      statuses[stage as Stage] = state.status;
+      if (state.detail) details[stage as Stage] = state.detail;
     }
   }
 
+  const hooks = job?.hooks ?? [];
+  const cards: Card[] = renders
+    .filter((r) => r.status === "done" && r.videoUrl)
+    .map((r) => ({
+      index: r.index,
+      concept: r.concept,
+      result: {
+        videoUrl: r.videoUrl!,
+        keyframeUrl: r.keyframeUrl,
+        genericKeyframeUrl: r.genericKeyframeUrl,
+      },
+    }));
+
+  const error = localError ?? job?.error ?? null;
+  const elapsed =
+    job?.finishedAt !== undefined && job.startedAt !== undefined
+      ? job.finishedAt - job.startedAt
+      : null;
+
   async function run() {
-    setRunning(true);
-    setStatuses({});
-    setDetails({});
-    setHooks([]);
-    setCards([]);
-    setElapsed(null);
+    setSubmitting(true);
+    setLocalError(null);
+    setJobId(null);
     setLiveMs(0);
-    setError(null);
 
     try {
       const res = await fetch("/api/generate", {
@@ -93,49 +83,20 @@ function ForgeInner() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      if (!res.body) throw new Error("no response stream");
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const collected: PipelineEvent[] = [];
-      let productName: string | undefined;
-      let finalElapsed: number | undefined;
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          const event = JSON.parse(line) as PipelineEvent;
-          apply(event);
-          collected.push(event);
-          if (event.type === "facts") productName = event.facts.name;
-          if (event.type === "done") finalElapsed = event.elapsedMs;
-        }
-      }
-
-      if (finalElapsed !== undefined) {
-        void saveGeneration({
-          url,
-          productName,
-          elapsedMs: finalElapsed,
-          events: collected,
-        }).catch(() => {});
-      }
+      if (!res.ok) throw new Error(`kickoff failed (${res.status})`);
+      const { jobId: id } = (await res.json()) as { jobId: Id<"jobs"> };
+      setJobId(id);
+      window.history.replaceState(null, "", `/forge?job=${id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setLocalError(err instanceof Error ? err.message : String(err));
     } finally {
-      setRunning(false);
+      setSubmitting(false);
     }
   }
 
   const extra = cards.filter((c) => c.index > 2);
   const cta = running ? "Forging…" : error ? "Retry" : "Forge ads";
-  const timer = elapsed ?? (running ? liveMs : null);
+  const timer = elapsed ?? (running && jobId ? liveMs : null);
 
   return (
     <AppShell status={running ? "Live" : "Ready"}>

@@ -17,7 +17,7 @@ import type { Concept, ProductFacts, ReviewHook } from "@/lib/types";
 
 export const CONCEPT_COUNT = 3;
 const SHOTS_PER_CONCEPT = 3;
-const MODEL = "gpt-4o";
+const MODEL = "gpt-5.6-luna";
 
 const DirectedConcept = z.object({
   sourceQuote: z
@@ -154,7 +154,6 @@ async function directConcepts(
 
   const completion = await getOpenAI().chat.completions.parse({
     model: MODEL,
-    temperature: 0.7,
     messages: [
       {
         role: "system",

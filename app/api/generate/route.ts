@@ -1,133 +1,148 @@
-import { NextRequest } from "next/server";
+import { randomUUID } from "node:crypto";
+import { NextRequest, NextResponse, after } from "next/server";
+import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { getConvexServer } from "@/lib/convexServer";
 import { extract } from "@/lib/stages/extract";
 import { reviews } from "@/lib/stages/reviews";
 import { concepts, CONCEPT_COUNT } from "@/lib/stages/concepts";
 import { trainLora, type LoraResult } from "@/lib/stages/lora";
 import { render } from "@/lib/stages/render";
-import type { PipelineEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+/**
+ * Async job kickoff. The response is just `{ jobId }` — the pipeline keeps
+ * running server-side (via `after()`) and writes every transition to Convex,
+ * so the client subscribes reactively and a refresh re-attaches to the run
+ * instead of losing it.
+ */
+export async function POST(req: NextRequest) {
+  const { url } = (await req.json()) as { url?: string };
+  if (!url) {
+    return NextResponse.json({ error: "url required" }, { status: 400 });
+  }
+
+  // Per-job write bearer: stored on the job, never sent to the browser.
+  const token = randomUUID();
+
+  // Only job creation is auth-aware (attaches the run to a signed-in user's
+  // history); the background workers authenticate with the job token alone.
+  const convex = getConvexServer();
+  const authToken = await convexAuthNextjsToken().catch(() => undefined);
+  if (authToken) convex.setAuth(authToken);
+  const jobId = await convex.mutation(api.jobs.create, { url, token });
+
+  after(() => runPipeline(jobId, token, url));
+
+  return NextResponse.json({ jobId }, { status: 202 });
+}
 
 /** Resolves to the value if the promise has already settled, else null. */
 async function readyOrNull<T>(p: Promise<T>): Promise<T | null> {
   return Promise.race([p, Promise.resolve(null)]) as Promise<T | null>;
 }
 
-export async function POST(req: NextRequest) {
-  const { url } = (await req.json()) as { url?: string };
-  if (!url) {
-    return new Response(JSON.stringify({ error: "url required" }), {
-      status: 400,
-      headers: { "content-type": "application/json" },
-    });
-  }
+async function runPipeline(jobId: Id<"jobs">, token: string, url: string) {
+  const convex = getConvexServer();
+  const job = { jobId, token };
 
-  const started = Date.now();
-  const encoder = new TextEncoder();
+  try {
+    // 1. Extract ----------------------------------------------------------
+    await convex.mutation(api.jobs.stageRunning, { ...job, stage: "extract" });
+    const facts = await extract(url);
+    await convex.mutation(api.jobs.recordFacts, { ...job, facts });
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (event: PipelineEvent) =>
-        controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
-
-      try {
-        // 1. Extract ------------------------------------------------------
-        send({ type: "stage", stage: "extract", status: "running" });
-        const facts = await extract(url);
-        send({ type: "facts", facts });
-        send({
-          type: "stage",
-          stage: "extract",
-          status: "done",
-          detail: facts.name,
+    // D3: training starts the moment we have images and runs alongside
+    // everything below; it reports to the job the instant it settles.
+    await convex.mutation(api.jobs.stageRunning, { ...job, stage: "lora" });
+    const loraPromise: Promise<LoraResult> = trainLora(url, facts.imageUrls)
+      .then(async (result) => {
+        await convex.mutation(api.jobs.recordLora, {
+          ...job,
+          loraId: result.loraId || null,
+          cached: result.cached,
         });
+        return result;
+      })
+      .catch(async () => {
+        const miss: LoraResult = { loraId: "", cached: false };
+        await convex
+          .mutation(api.jobs.recordLora, { ...job, loraId: null, cached: false })
+          .catch(() => {});
+        return miss;
+      });
 
-        // D3: training starts the moment we have images and runs alongside
-        // everything below. Nothing awaits it until render time.
-        send({ type: "stage", stage: "lora", status: "running" });
-        const loraPromise: Promise<LoraResult> = trainLora(
-          url,
-          facts.imageUrls
-        ).catch(() => ({ loraId: "", cached: false }));
+    // 2. Reviews ----------------------------------------------------------
+    await convex.mutation(api.jobs.stageRunning, { ...job, stage: "reviews" });
+    const { hooks } = await reviews(facts.name);
+    await convex.mutation(api.jobs.recordHooks, { ...job, hooks });
 
-        // 2. Reviews ------------------------------------------------------
-        send({ type: "stage", stage: "reviews", status: "running" });
-        const { hooks } = await reviews(facts.name);
-        send({ type: "hooks", hooks });
-        send({
-          type: "stage",
-          stage: "reviews",
-          status: "done",
-          detail: `${hooks.length} hooks`,
+    // 3. Concepts ---------------------------------------------------------
+    await convex.mutation(api.jobs.stageRunning, { ...job, stage: "concepts" });
+    const all = await concepts(facts, hooks);
+    const chosen = all.slice(0, CONCEPT_COUNT);
+    await convex.mutation(api.jobs.recordConcepts, { ...job, concepts: chosen });
+
+    // 4. Render — all concepts at once. Each worker owns one `renders` row,
+    // and one bad render no longer sinks the rest of the run.
+    await convex.mutation(api.jobs.stageRunning, { ...job, stage: "render" });
+    const settled = await Promise.allSettled(
+      chosen.map(async (concept, index) => {
+        // If the LoRA is already hot we use it; still training means
+        // style-prompting rather than blocking the video (D3).
+        const lora = await readyOrNull(loraPromise);
+        await convex.mutation(api.jobs.updateRender, {
+          ...job,
+          index,
+          status: "rendering",
         });
-
-        // 3. Concepts -----------------------------------------------------
-        send({ type: "stage", stage: "concepts", status: "running" });
-        const all = await concepts(facts, hooks);
-        const chosen = all.slice(0, CONCEPT_COUNT);
-        send({ type: "concepts", concepts: chosen });
-        send({
-          type: "stage",
-          stage: "concepts",
-          status: "done",
-          detail: `${chosen.length} concepts`,
-        });
-
-        // 4. Render -------------------------------------------------------
-        // If the LoRA is already hot (cached, per D3) we use it; if it is still
-        // training we fall back to style-prompting rather than block the demo.
-        const early = await readyOrNull(loraPromise);
-        if (early) {
-          send({
-            type: "lora",
-            loraId: early.loraId || null,
-            cached: early.cached,
-          });
-          send({
-            type: "stage",
-            stage: "lora",
+        try {
+          const result = await render(
+            concept.shots,
+            lora?.loraId || null,
+            index,
+            concept.hook
+          );
+          await convex.mutation(api.jobs.updateRender, {
+            ...job,
+            index,
             status: "done",
-            detail: early.cached ? "cached — hot" : "trained",
+            ...result,
+            usedLora: Boolean(lora?.loraId),
           });
-        }
-
-        send({ type: "stage", stage: "render", status: "running" });
-        for (const [index, concept] of chosen.entries()) {
-          const lora = early ?? (await readyOrNull(loraPromise));
-          const result = await render(concept.shots, lora?.loraId ?? null, index);
-          send({ type: "video", index, concept, result });
-        }
-        send({ type: "stage", stage: "render", status: "done" });
-
-        // Make sure the LoRA stage never ends up stuck on "running".
-        if (!early) {
-          const late = await loraPromise;
-          send({
-            type: "lora",
-            loraId: late.loraId || null,
-            cached: late.cached,
+        } catch (err) {
+          await convex.mutation(api.jobs.updateRender, {
+            ...job,
+            index,
+            status: "failed",
+            error: err instanceof Error ? err.message : String(err),
           });
-          send({ type: "stage", stage: "lora", status: "done" });
+          throw err;
         }
+      })
+    );
 
-        send({ type: "done", elapsedMs: Date.now() - started });
-      } catch (err) {
-        send({
-          type: "error",
-          message: err instanceof Error ? err.message : String(err),
-        });
-      } finally {
-        controller.close();
-      }
-    },
-  });
+    // Don't report done while the LoRA stage is mid-flight (its own `.then`
+    // writes the result the moment it lands).
+    await loraPromise;
 
-  return new Response(stream, {
-    headers: {
-      "content-type": "application/x-ndjson; charset=utf-8",
-      "cache-control": "no-cache, no-transform",
-      connection: "keep-alive",
-    },
-  });
+    const rendered = settled.filter((r) => r.status === "fulfilled").length;
+    await convex.mutation(api.jobs.complete, {
+      ...job,
+      rendered,
+      total: chosen.length,
+    });
+  } catch (err) {
+    await convex
+      .mutation(api.jobs.fail, {
+        ...job,
+        message: err instanceof Error ? err.message : String(err),
+      })
+      .catch((persistErr) =>
+        console.error("[generate] failed to persist job failure:", persistErr)
+      );
+  }
 }

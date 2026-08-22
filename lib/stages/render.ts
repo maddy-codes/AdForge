@@ -4,9 +4,13 @@ import { getFal } from "@/lib/fal";
 /**
  * Stage 4 — render one video per concept.
  *
- * D6, two internal stages (the external contract stays `render(shots, loraId)`):
+ * D6, three internal stages (external contract stays `render(shots, loraId)`,
+ * `captionText` is an optional fourth param added for VEED captions):
  *   1. `fal-ai/flux-lora` generates an on-brand keyframe from the shot list
  *   2. Kling 2.5 Turbo Pro (i2v) animates that keyframe
+ *   3. `veed/subtitles` (fal) burns the concept's hook in as a styled caption —
+ *      `srt_content` is supplied directly so it skips transcription entirely
+ *      (the Kling clip has no audio track to transcribe from)
  *
  * The generic keyframe — same prompt, no LoRA — is rendered alongside it purely
  * to power the before/after toggle. That toggle is the money shot for the jury,
@@ -55,10 +59,39 @@ async function animateKeyframe(
   return (data as { video: { url: string } }).video.url;
 }
 
+// "fusion" is one of VEED's dynamic (2x) presets — animated per-word highlight,
+// reads far punchier on short-form vertical ad video than the basic tier.
+const CAPTION_PRESET = "fusion";
+
+/** One cue spanning the whole clip — good enough for a 5–8s Kling render. */
+function buildSrt(text: string): string {
+  return `1\n00:00:00,000 --> 00:00:08,000\n${text}\n`;
+}
+
+async function burnCaptions(videoUrl: string, captionText: string): Promise<string> {
+  const { data } = await getFal().subscribe("veed/subtitles", {
+    input: {
+      video_url: videoUrl,
+      preset: CAPTION_PRESET,
+      srt_content: buildSrt(captionText),
+      customization: {
+        position: "bottom",
+        shadow: "max",
+        text_customizations: {
+          baseline: { weight: 800 },
+          highlight: { weight: 900, color: "#FFD400" },
+        },
+      },
+    },
+  });
+  return (data as { video: { url: string } }).video.url;
+}
+
 export async function render(
   shots: string[],
   loraId: string | null,
-  index = 0
+  index = 0,
+  captionText?: string
 ): Promise<RenderResult> {
   if (!process.env.FAL_KEY) {
     // Staggered so cards stream in one at a time (D7) instead of all at once.
@@ -71,7 +104,17 @@ export async function render(
     generateKeyframe(prompt, loraId),
     generateKeyframe(prompt, null),
   ]);
-  const videoUrl = await animateKeyframe(keyframeUrl, prompt);
+  const rawVideoUrl = await animateKeyframe(keyframeUrl, prompt);
+
+  let videoUrl = rawVideoUrl;
+  if (captionText) {
+    try {
+      videoUrl = await burnCaptions(rawVideoUrl, captionText);
+    } catch (err) {
+      // Captions are a finishing touch — never let them sink the render.
+      console.error("[render] VEED subtitles failed, using uncaptioned video:", err);
+    }
+  }
 
   return { videoUrl, keyframeUrl, genericKeyframeUrl };
 }

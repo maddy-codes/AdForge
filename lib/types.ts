@@ -41,14 +41,3 @@ export type RenderResult = {
 export type Stage = "extract" | "reviews" | "concepts" | "lora" | "render";
 
 export type StageStatus = "pending" | "running" | "done" | "failed" | "skipped";
-
-/** Events streamed from /api/generate to the UI (newline-delimited JSON). */
-export type PipelineEvent =
-  | { type: "stage"; stage: Stage; status: StageStatus; detail?: string }
-  | { type: "facts"; facts: ProductFacts }
-  | { type: "hooks"; hooks: ReviewHook[] }
-  | { type: "concepts"; concepts: Concept[] }
-  | { type: "lora"; loraId: string | null; cached: boolean }
-  | { type: "video"; index: number; concept: Concept; result: RenderResult }
-  | { type: "error"; message: string }
-  | { type: "done"; elapsedMs: number };

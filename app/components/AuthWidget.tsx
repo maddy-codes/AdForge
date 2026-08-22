@@ -50,7 +50,7 @@ function SignedOut() {
 
 function SignedIn() {
   const { signOut } = useAuthActions();
-  const history = useQuery(api.generations.list);
+  const history = useQuery(api.jobs.history);
 
   return (
     <div className="flex items-center gap-3">

@@ -1,24 +1,28 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import JSZip from "jszip";
 import { getFal } from "@/lib/fal";
+import { getConvexServer } from "@/lib/convexServer";
+import { api } from "@/convex/_generated/api";
 
 /**
  * Brand LoRA training (D3, D6).
  *
  * D3: training kicks off on URL submit and runs async — videos generate via
  * style-prompting while it trains, then swap to LoRA output when it lands.
- * For the demo the LoRA is pre-trained at boot and cached to disk, so the live
- * run is hot. Cache key is a hash of the product URL.
+ * The cache lives in the Convex `loras` table (keyed by product URL) so a
+ * LoRA trained anywhere — including the boot pretrain — makes every later
+ * run hot. The legacy `.lora-cache` disk folder is read once as a fallback
+ * and migrated into Convex on hit.
  *
  * D6 stage 1: `fal-ai/flux-lora-fast-training` on the product images.
  */
 
-const CACHE_DIR = path.join(process.cwd(), ".lora-cache");
+const LEGACY_CACHE_DIR = path.join(process.cwd(), ".lora-cache");
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 
-function cacheKey(url: string): string {
+function legacyCacheKey(url: string): string {
   return createHash("sha256").update(url).digest("hex").slice(0, 16);
 }
 
@@ -26,10 +30,10 @@ export function getMockLoraId(): string {
   return "mock-lora://glowrecipe-watermelon-dew-drops";
 }
 
-async function readCache(url: string): Promise<string | null> {
+async function readLegacyDiskCache(url: string): Promise<string | null> {
   try {
     const raw = await readFile(
-      path.join(CACHE_DIR, `${cacheKey(url)}.json`),
+      path.join(LEGACY_CACHE_DIR, `${legacyCacheKey(url)}.json`),
       "utf8"
     );
     return (JSON.parse(raw) as { loraId: string }).loraId;
@@ -38,12 +42,22 @@ async function readCache(url: string): Promise<string | null> {
   }
 }
 
+async function readCache(url: string): Promise<string | null> {
+  const convex = getConvexServer();
+  const hit = await convex
+    .query(api.loras.lookup, { url })
+    .catch(() => null);
+  if (hit) return hit;
+
+  const legacy = await readLegacyDiskCache(url);
+  if (legacy) {
+    await convex.mutation(api.loras.save, { url, loraId: legacy }).catch(() => {});
+  }
+  return legacy;
+}
+
 async function writeCache(url: string, loraId: string): Promise<void> {
-  await mkdir(CACHE_DIR, { recursive: true });
-  await writeFile(
-    path.join(CACHE_DIR, `${cacheKey(url)}.json`),
-    JSON.stringify({ url, loraId, trainedAt: new Date().toISOString() }, null, 2)
-  );
+  await getConvexServer().mutation(api.loras.save, { url, loraId });
 }
 
 /** Local `/mock/...` paths are read straight off disk; anything else is fetched. */
