@@ -1,4 +1,5 @@
 import type { ProductFacts } from "@/lib/types";
+import { extractPage } from "@/lib/tavily";
 
 /**
  * Stage 1 — extract structured product fields from a live URL.
@@ -39,11 +40,17 @@ export function getMockFacts(): ProductFacts {
 }
 
 export async function extract(url: string): Promise<ProductFacts> {
-  if (!process.env.TAVILY_API_KEY || !process.env.PIONEER_API_KEY) {
-    return getMockFacts();
+  const mock = getMockFacts();
+  if (!process.env.TAVILY_API_KEY) return mock;
+
+  // GLiNER2 via Pioneer (Phase 5) isn't wired yet, so the structured fields
+  // (name/price/features/materials/category/tone) stay mocked for now — but
+  // the product images are real, scraped live off the URL, and that's what
+  // actually feeds LoRA training (D2).
+  try {
+    const { imageUrls } = await extractPage(url);
+    return imageUrls.length ? { ...mock, imageUrls: imageUrls.slice(0, 6) } : mock;
+  } catch {
+    return mock;
   }
-  // TODO(M): Tavily Extract (include_images: true) -> GLiNER2 via Pioneer.
-  // Until that lands, the mock keeps every downstream stage unblocked.
-  void url;
-  return getMockFacts();
 }

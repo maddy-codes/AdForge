@@ -1,4 +1,5 @@
-import type { Reviews } from "@/lib/types";
+import type { ReviewHook, Reviews } from "@/lib/types";
+import { tavilySearch } from "@/lib/tavily";
 
 /**
  * Stage 2 — surface what real customers actually praise.
@@ -31,11 +32,55 @@ export function getMockReviews(): Reviews {
   };
 }
 
+const THEME_KEYWORDS: [string, string[]][] = [
+  ["Fast visible glow", ["glow", "brighten", "radian", "lit"]],
+  ["Layers cleanly", ["pill", "layer", "makeup", "spf", "sunscreen"]],
+  ["Tone evening", ["dark spot", "even", "tone", "discolor"]],
+  ["Sensory / refreshing", ["refresh", "cool", "hydrat", "dewy", "water"]],
+];
+
+function themeFor(text: string): string {
+  const lower = text.toLowerCase();
+  for (const [theme, keywords] of THEME_KEYWORDS) {
+    if (keywords.some((k) => lower.includes(k))) return theme;
+  }
+  return "General praise";
+}
+
+/** Pull short, quote-shaped sentences out of Tavily's crawled review content. */
+function extractHooks(contents: string[]): ReviewHook[] {
+  const seen = new Set<string>();
+  const hooks: ReviewHook[] = [];
+
+  for (const content of contents) {
+    const sentences = content
+      .replace(/\s+/g, " ")
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim().replace(/^["“]|["”]$/g, ""))
+      .filter((s) => s.length >= 20 && s.length <= 140);
+
+    for (const quote of sentences) {
+      const key = quote.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hooks.push({ quote, theme: themeFor(quote) });
+      if (hooks.length >= 4) return hooks;
+    }
+  }
+  return hooks;
+}
+
 export async function reviews(urlOrName: string): Promise<Reviews> {
   if (!process.env.TAVILY_API_KEY) {
     return getMockReviews();
   }
-  // TODO(M): Tavily Search -> dedupe -> theme-cluster -> top hooks.
-  void urlOrName;
-  return getMockReviews();
+  try {
+    const results = await tavilySearch(`${urlOrName} customer reviews`, {
+      maxResults: 8,
+    });
+    const hooks = extractHooks(results.map((r) => r.content));
+    return hooks.length ? { hooks } : getMockReviews();
+  } catch {
+    return getMockReviews();
+  }
 }

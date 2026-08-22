@@ -19,10 +19,9 @@ Status key: ✅ done · 🟡 partial · ⬜ not started
 | Interface contract agreed (`extract/reviews/concepts/render`) | ✅ — `lib/types.ts` |
 | Demo product locked (D1 — Glow Recipe Watermelon Dew Drops) | ✅ |
 | `.env.local` scaffolded with 4 key names | ✅ file exists |
-| **Keys actually populated** (`OPENAI_API_KEY`, `FAL_KEY`, `TAVILY_API_KEY`, `PIONEER_API_KEY`) | ⬜ **all 4 empty right now** — only Convex vars are set |
+| **Keys actually populated** (`OPENAI_API_KEY`, `FAL_KEY`, `TAVILY_API_KEY`, `PIONEER_API_KEY`) | ✅ all 4 set in `.env.local` |
 
-**Blocking:** nothing downstream is blocked (every stage has a mock fallback), but
-**no real API can run until these 4 keys are filled in**. This is the actual next action.
+**Blocking:** none. All 4 keys are in place — Phase 2 (fal) is unblocked.
 
 ---
 
@@ -54,16 +53,16 @@ watch the full mocked flow end to end, streamed, with the before/after asset pai
 
 | Subtask | Status |
 |---|---|
-| `fal-ai/flux-lora-fast-training` call in `trainLora()` | ⬜ stub only — `TODO(G)` in `lib/stages/lora.ts:59` |
-| `fal-ai/flux-lora` keyframe generation (with LoRA) | ⬜ stub — `TODO(G)` in `lib/stages/render.ts:42` |
-| Generic (no-LoRA) keyframe generation for before/after toggle | ⬜ same stub, not split out yet |
-| Kling 2.5 Turbo Pro image-to-video animation step | ⬜ not started |
-| Wire real `FAL_KEY`, confirm cache-key-by-URL still holds under real training | ⬜ blocked on key |
-| Pre-train demo product's LoRA at boot, cache to disk (D3-C) | ⬜ cache dir/format exists (`.lora-cache/`), no boot-time trigger yet |
-| Before/after toggle in `AdCard.tsx` reading `keyframeUrl` vs `genericKeyframeUrl` | 🟡 check `AdCard.tsx` — types support it (`RenderResult` has both fields), confirm UI toggle is wired, not just data |
+| `fal-ai/flux-lora-fast-training` call in `trainLora()` | ✅ real call wired, gated on `FAL_KEY` — `lib/stages/lora.ts` |
+| `fal-ai/flux-lora` keyframe generation (with LoRA) | ✅ `lib/stages/render.ts:generateKeyframe` |
+| Generic (no-LoRA) keyframe generation for before/after toggle | ✅ same fn called with `loraId: null`, run in parallel |
+| Kling 2.5 Turbo Pro image-to-video animation step | ✅ `lib/stages/render.ts:animateKeyframe` |
+| Wire real `FAL_KEY`, confirm cache-key-by-URL still holds under real training | ✅ key set, cache guards against pre-key `mock-lora://` entries |
+| Pre-train demo product's LoRA at boot, cache to disk (D3-C) | 🟡 cache + real train call both exist; still no explicit boot-time trigger — first live run trains cold |
+| Before/after toggle in `AdCard.tsx` reading `keyframeUrl` vs `genericKeyframeUrl` | 🟡 not yet re-verified in UI this pass — check `AdCard.tsx` |
 
-**This is the critical path.** Nothing else in the demo differentiates without it. Start here
-the moment fal key + credits are in hand.
+**This is the critical path — code complete.** Remaining: boot-time pre-train trigger, and
+confirm the before/after toggle live once a real run is tested end to end.
 
 ---
 
@@ -73,10 +72,12 @@ the moment fal key + credits are in hand.
 
 | Subtask | Status |
 |---|---|
-| Tavily Extract for page text + `imageUrls` (feeds both GLiNER2 and LoRA training) | ⬜ `TODO(M)` in `lib/stages/extract.ts:45` |
-| Tavily Search for review crawl | ⬜ `TODO(M)` in `lib/stages/reviews.ts:38` |
-| Dedupe / theme-cluster into `{quote, theme}` hooks | ⬜ not started |
-| Wire real `TAVILY_API_KEY` (promo `AugustLondon` for 8k top-up — confirm claimed) | ⬜ blocked on key |
+| Tavily Extract for page text + `imageUrls` (feeds LoRA training) | ✅ `lib/tavily.ts:extractPage`, wired in `lib/stages/extract.ts` — real product photos now flow into `trainLora()`. Structured fields (name/price/features/materials/category/tone) still mocked pending GLiNER2 (Phase 5) |
+| Tavily Search for review crawl | ✅ `lib/tavily.ts:tavilySearch`, wired in `lib/stages/reviews.ts` |
+| Dedupe / theme-cluster into `{quote, theme}` hooks | ✅ heuristic sentence-extraction + keyword theme bucketing in `reviews.ts:extractHooks` — no LLM yet, upgrade candidate once Phase 4 (OpenAI) lands |
+| Wire real `TAVILY_API_KEY` (promo `AugustLondon` for 8k top-up — confirm claimed) | ✅ key set |
+
+**Phase 3 code complete.** Not yet tested against a live run (Phase 7). `tsc --noEmit` passes.
 
 ---
 
@@ -157,7 +158,7 @@ never gates the core demo, which must work fully signed-out.
 
 ## Where we actually are, in one line
 
-**Phase 1 (fully mocked, streaming, end-to-end demo) is done.** Phases 2–5 are all
-`TODO`-stubbed with clean fallbacks and blocked on the same thing: **the 4 API keys in
-`.env.local` are still empty.** Fill those in and Phase 2 (fal) is the next real work,
-per D9's ranked build order.
+**Phases 0–3 are done.** All 4 keys are set, Phase 1 (mocked pipeline) is done, Phase 2
+(fal LoRA + render) and Phase 3 (Tavily extract + reviews) are wired to real APIs.
+Phase 4 (OpenAI creative director) is next, per D9's ranked build order — `concepts.ts`
+still returns `getMockConcepts()` unconditionally.

@@ -33,17 +33,12 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${display.variable} ${sans.variable} ${mono.variable}`}
-    >
-      <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
-        {children}
-      </body>
-    </html>
     <ConvexAuthNextjsServerProvider>
-      <html lang="en">
-        <body className="min-h-screen antialiased">
+      <html
+        lang="en"
+        className={`${display.variable} ${sans.variable} ${mono.variable}`}
+      >
+        <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </body>
       </html>

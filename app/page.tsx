@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import PipelineSteps from "./components/PipelineSteps";
@@ -145,35 +144,6 @@ export default function Home() {
         <span className="orb orb-mint float-b top-[8%] right-[-6%] h-[22rem] w-[22rem] opacity-90" />
         <span className="orb orb-lilac float-c right-[18%] bottom-[-10%] h-[26rem] w-[26rem] opacity-75" />
         <span className="orb orb-coral float-b top-[48%] left-[8%] h-40 w-40 opacity-50" />
-    <main className="mx-auto max-w-6xl px-6 py-14">
-      <header className="mb-10 flex items-start justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-semibold tracking-tight">
-            Ad<span className="text-melon">Forge</span>
-          </h1>
-          <p className="mt-2 max-w-xl text-white/50">
-            Paste a product URL. Get on-brand short-form ads written around
-            what real customers actually praise. Minutes, not weeks.
-          </p>
-        </div>
-        <AuthWidget />
-      </header>
-
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !running && run()}
-          placeholder="https://…"
-          className="flex-1 rounded-xl border border-white/10 bg-ink-soft px-4 py-3 text-sm outline-none placeholder:text-white/25 focus:border-melon/60"
-        />
-        <button
-          onClick={run}
-          disabled={running || !url}
-          className="rounded-xl bg-melon px-6 py-3 text-sm font-semibold text-black transition-opacity disabled:opacity-40"
-        >
-          {running ? "Forging…" : "Generate ads"}
-        </button>
       </div>
 
       <main className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6 pt-6 pb-16">
@@ -182,9 +152,12 @@ export default function Home() {
             AdForge
             <span className="ml-1 inline-block h-2 w-2 rounded-full bg-coral" />
           </span>
-          <span className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
-            {running ? "Live" : "Ready"}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
+              {running ? "Live" : "Ready"}
+            </span>
+            <AuthWidget />
+          </div>
         </nav>
 
         <header className="rise mb-10 max-w-4xl">
