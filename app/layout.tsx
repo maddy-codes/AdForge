@@ -1,6 +1,6 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Outfit, Sora } from "next/font/google";
-import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server";
 import ConvexClientProvider from "./ConvexClientProvider";
 import "./globals.css";
 
@@ -33,15 +33,15 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <ConvexAuthNextjsServerProvider>
-      <html
-        lang="en"
-        className={`${display.variable} ${sans.variable} ${mono.variable}`}
-      >
-        <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
+    <html
+      lang="en"
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
+    >
+      <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
+        <ClerkProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
-        </body>
-      </html>
-    </ConvexAuthNextjsServerProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

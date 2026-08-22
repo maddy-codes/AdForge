@@ -1,4 +1,3 @@
-import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -81,6 +80,13 @@ export default defineSchema({
     error: v.optional(v.string()),
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),
+export default defineSchema({
+  generations: defineTable({
+    userId: v.string(),
+    url: v.string(),
+    productName: v.optional(v.string()),
+    elapsedMs: v.optional(v.number()),
+    events: v.array(v.any()),
   }).index("by_user", ["userId"]),
 
   // One row per concept render. A child table (not an array on the job) so
