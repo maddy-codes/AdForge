@@ -11,46 +11,65 @@ const STEPS: { stage: Stage; label: string; partner: string }[] = [
 ];
 
 const DOT: Record<StageStatus, string> = {
-  pending: "bg-white/15",
-  running: "bg-melon pulse-ring",
-  done: "bg-mint",
-  failed: "bg-red-400",
-  skipped: "bg-white/25",
+  pending: "bg-hairline",
+  running: "bg-tungsten pulse-ring",
+  done: "bg-tungsten",
+  failed: "bg-danger",
+  skipped: "bg-muted/40",
 };
 
 export default function PipelineSteps({
   statuses,
   details,
+  elapsed,
 }: {
   statuses: Partial<Record<Stage, StageStatus>>;
   details: Partial<Record<Stage, string>>;
+  elapsed?: number | null;
 }) {
   return (
-    <ol className="grid gap-3 sm:grid-cols-5">
-      {STEPS.map(({ stage, label, partner }) => {
-        const status = statuses[stage] ?? "pending";
-        return (
-          <li
-            key={stage}
-            className={`rounded-xl border border-white/10 bg-ink-soft/70 p-4 transition-opacity ${
-              status === "pending" ? "opacity-45" : "opacity-100"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${DOT[status]}`} />
-              <span className="text-sm font-medium">{label}</span>
-            </div>
-            <p className="mt-2 text-[11px] tracking-wide text-white/40 uppercase">
-              {partner}
-            </p>
-            {details[stage] && (
-              <p className="mt-1 truncate text-xs text-mint/80">
-                {details[stage]}
-              </p>
-            )}
-          </li>
-        );
-      })}
-    </ol>
+    <div className="flex items-end gap-4">
+      <ol className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
+        {STEPS.map(({ stage, label, partner }, i) => {
+          const status = statuses[stage] ?? "pending";
+          const idle = status === "pending";
+          return (
+            <li key={stage} className="flex min-w-0 flex-1 items-center">
+              {i > 0 && (
+                <span
+                  className="mx-1 h-px min-w-3 flex-1 bg-hairline"
+                  aria-hidden
+                />
+              )}
+              <div
+                className={`flex min-w-0 flex-col items-start px-1 transition-opacity ${
+                  idle ? "opacity-40" : "opacity-100"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${DOT[status]}`}
+                  />
+                  <span className="text-sm whitespace-nowrap">{label}</span>
+                </div>
+                <p className="font-mono text-[11px] tracking-widest text-muted uppercase">
+                  {partner}
+                </p>
+                {details[stage] && (
+                  <p className="max-w-full truncate font-mono text-[11px] text-tungsten">
+                    {details[stage]}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {elapsed != null && (
+        <span className="mb-0.5 shrink-0 font-mono text-[11px] tracking-widest text-muted uppercase">
+          {(elapsed / 1000).toFixed(1)}s
+        </span>
+      )}
+    </div>
   );
 }

@@ -1,29 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #0a0a0f;
-  --color-ink-soft: #14141d;
-  --color-melon: #ff6b8a;
-  --color-melon-soft: #ffd6df;
-  --color-mint: #7ee7c7;
+  --color-canvas: #12110f;
+  --color-surface: #1a1916;
+  --color-fg: #f4f0e6;
+  --color-muted: #8c877a;
+  --color-hairline: #2e2c26;
+  --color-tungsten: #e8b14a;
+  --color-generic: #6e7380;
+  --color-danger: #d4604a;
+
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument-serif), ui-serif, georgia, serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
 }
 
 html,
 body {
-  background: var(--color-ink);
-  color: #f5f5f7;
+  background: var(--color-canvas);
+  color: var(--color-fg);
   -webkit-font-smoothing: antialiased;
 }
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgb(255 107 138 / 0.45);
+    box-shadow: 0 0 0 0 rgb(232 177 74 / 0.45);
   }
   70% {
-    box-shadow: 0 0 0 10px rgb(255 107 138 / 0);
+    box-shadow: 0 0 0 10px rgb(232 177 74 / 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(255 107 138 / 0);
+    box-shadow: 0 0 0 0 rgb(232 177 74 / 0);
   }
 }
 
@@ -43,5 +50,5 @@ body {
 }
 
 .rise {
-  animation: rise 0.45s ease-out both;
+  animation: rise 0.4s ease-out both;
 }
