@@ -1,18 +1,16 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Instrument_Sans, Instrument_Serif } from "next/font/google";
+import { IBM_Plex_Mono, Outfit, Sora } from "next/font/google";
 import "./globals.css";
 
-const sans = Instrument_Sans({
+const display = Sora({
   subsets: ["latin"],
-  variable: "--font-instrument-sans",
+  variable: "--font-sora",
   display: "swap",
 });
 
-const serif = Instrument_Serif({
+const sans = Outfit({
   subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  variable: "--font-instrument-serif",
+  variable: "--font-outfit",
   display: "swap",
 });
 
@@ -35,9 +33,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${sans.variable} ${serif.variable} ${mono.variable}`}
+      className={`${display.variable} ${sans.variable} ${mono.variable}`}
     >
-      <body className="min-h-screen bg-canvas font-sans text-fg antialiased">
+      <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
         {children}
       </body>
     </html>

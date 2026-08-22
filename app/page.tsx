@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PipelineSteps from "./components/PipelineSteps";
 import AdCard from "./components/AdCard";
 import { DEMO_URL } from "@/lib/stages/extract";
@@ -27,7 +27,15 @@ export default function Home() {
   const [hooks, setHooks] = useState<ReviewHook[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [elapsed, setElapsed] = useState<number | null>(null);
+  const [liveMs, setLiveMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!running) return;
+    const t0 = Date.now();
+    const id = setInterval(() => setLiveMs(Date.now() - t0), 100);
+    return () => clearInterval(id);
+  }, [running]);
 
   function apply(event: PipelineEvent) {
     switch (event.type) {
@@ -70,6 +78,7 @@ export default function Home() {
     setHooks([]);
     setCards([]);
     setElapsed(null);
+    setLiveMs(0);
     setError(null);
 
     try {
@@ -102,90 +111,168 @@ export default function Home() {
   }
 
   const extra = cards.filter((c) => c.index > 2);
-  const cta = running ? "Forging…" : error ? "Retry" : "Generate ads";
+  const cta = running ? "Forging…" : error ? "Retry" : "Forge ads";
+  const timer = elapsed ?? (running ? liveMs : null);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-6xl flex-col px-6 py-10">
-      <header className="mb-8">
-        <h1 className="font-serif text-5xl tracking-tight md:text-6xl">
-          Ad<span className="text-tungsten">Forge</span>
-        </h1>
-        <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-muted">
-          Paste a product URL. Get on-brand short-form ads written around what
-          real customers actually praise.
-        </p>
-      </header>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !running && run()}
-          placeholder="https://…"
-          className="flex-1 rounded-[4px] border border-hairline bg-surface px-4 py-3 text-sm outline-none placeholder:text-muted/50 focus:border-tungsten"
-        />
-        <button
-          onClick={run}
-          disabled={running || !url}
-          className="rounded-[4px] bg-tungsten px-6 py-3 text-sm font-medium text-canvas transition-opacity disabled:opacity-40"
-        >
-          {cta}
-        </button>
+    <div className="relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <span className="orb orb-coral float-a top-[-8%] left-[-8%] h-[28rem] w-[28rem] opacity-80" />
+        <span className="orb orb-mint float-b top-[8%] right-[-6%] h-[22rem] w-[22rem] opacity-90" />
+        <span className="orb orb-lilac float-c right-[18%] bottom-[-10%] h-[26rem] w-[26rem] opacity-75" />
+        <span className="orb orb-coral float-b top-[48%] left-[8%] h-40 w-40 opacity-50" />
       </div>
 
-      <section className="mt-6">
-        <PipelineSteps
-          statuses={statuses}
-          details={details}
-          elapsed={elapsed}
-        />
-        <p className="mt-3 font-mono text-[11px] tracking-widest text-muted uppercase">
-          Pioneer · Tavily · fal · OpenAI
-        </p>
-      </section>
+      <main className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6 pt-6 pb-16">
+        <nav className="mb-10 flex items-center justify-between">
+          <span className="font-display text-xl font-semibold tracking-tight">
+            AdForge
+            <span className="ml-1 inline-block h-2 w-2 rounded-full bg-coral" />
+          </span>
+          <span className="rounded-full bg-ink px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
+            {running ? "Live" : "Ready"}
+          </span>
+        </nav>
 
-      {error && (
-        <p className="mt-6 font-mono text-sm text-danger">{error}</p>
-      )}
+        <header className="rise mb-10 max-w-4xl">
+          <p className="mb-4 inline-flex rounded-full bg-ink px-3 py-1 font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
+            URL in → three ad films out
+          </p>
+          <h1 className="font-display text-[2.75rem] leading-[1.05] font-semibold tracking-[-0.04em] md:text-6xl">
+            Ads that look like{" "}
+            <span className="-rotate-1 inline-block rounded-[1.25rem] bg-mint px-2 py-0.5">
+              your brand
+            </span>
+            <br />
+            not like AI.
+          </h1>
+          <p className="mt-5 max-w-xl text-base leading-relaxed text-muted">
+            Paste a product URL. We study the page, steal the quotes customers
+            actually use, train a LoRA on your own shots — then drop three
+            short-form films onto the stage.
+          </p>
+        </header>
 
-      <section className="mt-8">
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {SLOTS.map((slot) => {
-            const card = cards.find((c) => c.index === slot);
-            if (!card) return <EmptyFrame key={slot} />;
-            return (
-              <AdCard
-                key={card.index}
-                index={card.index}
-                concept={card.concept}
-                result={card.result}
-                review={hooks[card.index]}
-              />
-            );
-          })}
-          {extra.map((card) => (
-            <AdCard
-              key={card.index}
-              index={card.index}
-              concept={card.concept}
-              result={card.result}
-              review={hooks[card.index]}
-            />
-          ))}
+        <div
+          className="rise flex flex-col gap-2 rounded-[28px] border border-hairline bg-surface p-2 shadow-[0_20px_50px_-30px_rgb(17_17_17/0.4)] sm:flex-row"
+          style={{ animationDelay: "100ms" }}
+        >
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !running && run()}
+            placeholder="https://your-product-page…"
+            spellCheck={false}
+            className="flex-1 rounded-2xl bg-canvas px-4 py-3.5 font-mono text-sm outline-none placeholder:text-muted/50"
+          />
+          <button
+            onClick={run}
+            disabled={running || !url}
+            className="cta-pop rounded-2xl bg-coral px-8 py-3.5 font-display text-base font-bold text-white transition-transform disabled:translate-y-0 disabled:opacity-40 disabled:shadow-none"
+          >
+            {cta}
+          </button>
         </div>
-      </section>
-    </main>
+
+        <section className="rise mt-5" style={{ animationDelay: "180ms" }}>
+          <PipelineSteps
+            statuses={statuses}
+            details={details}
+            elapsed={timer}
+          />
+        </section>
+
+        {error && (
+          <p className="mt-6 font-display text-sm font-semibold text-danger">
+            {error}
+          </p>
+        )}
+
+        <section className="mt-14">
+          <div className="mx-auto grid max-w-[980px] justify-items-center gap-10 sm:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+            {SLOTS.map((slot) => {
+              const card = cards.find((c) => c.index === slot);
+              const lift =
+                slot === 1 ? "lg:-translate-y-8" : "lg:translate-y-2";
+              if (!card)
+                return (
+                  <div key={slot} className={`w-full max-w-[280px] ${lift}`}>
+                    <EmptyFrame index={slot} running={running} />
+                  </div>
+                );
+              return (
+                <div
+                  key={card.index}
+                  className={`w-full max-w-[280px] ${lift}`}
+                >
+                  <AdCard
+                    index={card.index}
+                    concept={card.concept}
+                    result={card.result}
+                    review={hooks[card.index]}
+                  />
+                </div>
+              );
+            })}
+            {extra.map((card) => (
+              <div key={card.index} className="w-full max-w-[280px]">
+                <AdCard
+                  index={card.index}
+                  concept={card.concept}
+                  result={card.result}
+                  review={hooks[card.index]}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <footer className="mt-20 flex flex-col items-center gap-2 pt-6 text-center">
+          <p className="font-display text-[12px] font-semibold tracking-wide text-muted uppercase">
+            Forged with Pioneer · Tavily · fal · OpenAI
+          </p>
+          <p className="text-[11px] tracking-wide text-muted/70 uppercase">
+            {"{Tech: Europe}"} × VEED Hackathon — London
+          </p>
+        </footer>
+      </main>
+    </div>
   );
 }
 
-function EmptyFrame() {
+const EMPTY_GLOW = [
+  "shadow-[0_24px_60px_-24px_rgb(255_77_46/0.4)]",
+  "shadow-[0_24px_60px_-24px_rgb(200_245_74/0.5)]",
+  "shadow-[0_24px_60px_-24px_rgb(201_183_255/0.5)]",
+];
+
+function EmptyFrame({ index, running }: { index: number; running: boolean }) {
   return (
     <div
-      className="overflow-hidden rounded-[12px] border border-hairline bg-surface"
+      className={`phone-lift rounded-[36px] border border-white bg-surface p-2.5 ${EMPTY_GLOW[index]} ${
+        running ? "" : "bob"
+      }`}
+      style={{ animationDelay: `${index * 700}ms` }}
       aria-hidden
     >
-      <div className="aspect-[9/16] bg-canvas" />
-      <div className="h-11 border-t border-hairline" />
+      <div
+        className={`relative aspect-[9/16] overflow-hidden rounded-[28px] bg-ink ${
+          running ? "shimmer" : ""
+        }`}
+      >
+        <span className="absolute top-2.5 left-1/2 h-5 w-[72px] -translate-x-1/2 rounded-full bg-black/80" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <span className="font-display text-4xl font-semibold text-white/15">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <span className="rounded-full bg-white/10 px-3 py-1 font-display text-[10px] font-semibold tracking-wide text-white/50 uppercase">
+            {running ? "Forging" : "Awaiting"}
+          </span>
+        </div>
+      </div>
+      <div className="mt-2 rounded-full bg-canvas py-2 text-center font-display text-[11px] font-semibold tracking-wide text-muted/50 uppercase">
+        — · —
+      </div>
     </div>
   );
 }

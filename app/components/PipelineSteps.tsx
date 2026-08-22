@@ -10,14 +10,6 @@ const STEPS: { stage: Stage; label: string; partner: string }[] = [
   { stage: "render", label: "Generate", partner: "fal · Kling i2v" },
 ];
 
-const DOT: Record<StageStatus, string> = {
-  pending: "bg-hairline",
-  running: "bg-tungsten pulse-ring",
-  done: "bg-tungsten",
-  failed: "bg-danger",
-  skipped: "bg-muted/40",
-};
-
 export default function PipelineSteps({
   statuses,
   details,
@@ -28,48 +20,39 @@ export default function PipelineSteps({
   elapsed?: number | null;
 }) {
   return (
-    <div className="flex items-end gap-4">
-      <ol className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
-        {STEPS.map(({ stage, label, partner }, i) => {
+    <div className="relative rounded-[28px] border border-hairline bg-surface p-2.5 shadow-[0_16px_40px_-28px_rgb(17_17_17/0.35)]">
+      {elapsed != null && (
+        <span className="absolute -top-2.5 right-4 rounded-full bg-ink px-2.5 py-1 font-mono text-[10px] tracking-widest text-mint uppercase tabular-nums">
+          {(elapsed / 1000).toFixed(1)}s
+        </span>
+      )}
+      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {STEPS.map(({ stage, label, partner }) => {
           const status = statuses[stage] ?? "pending";
-          const idle = status === "pending";
           return (
-            <li key={stage} className="flex min-w-0 flex-1 items-center">
-              {i > 0 && (
-                <span
-                  className="mx-1 h-px min-w-3 flex-1 bg-hairline"
-                  aria-hidden
-                />
-              )}
-              <div
-                className={`flex min-w-0 flex-col items-start px-1 transition-opacity ${
-                  idle ? "opacity-40" : "opacity-100"
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${DOT[status]}`}
-                  />
-                  <span className="text-sm whitespace-nowrap">{label}</span>
-                </div>
-                <p className="font-mono text-[11px] tracking-widest text-muted uppercase">
-                  {partner}
-                </p>
-                {details[stage] && (
-                  <p className="max-w-full truncate font-mono text-[11px] text-tungsten">
-                    {details[stage]}
-                  </p>
-                )}
-              </div>
+            <li
+              key={stage}
+              className={`flex min-h-[4.75rem] flex-col justify-between rounded-2xl px-3 py-2.5 ${
+                status === "running"
+                  ? "bg-coral text-white"
+                  : status === "done"
+                    ? "bg-mint text-ink"
+                    : "bg-canvas text-muted"
+              }`}
+            >
+              <p className="font-display text-sm leading-none font-semibold tracking-tight">
+                {label}
+              </p>
+              <p className="mt-1 truncate font-mono text-[9px] leading-none tracking-[0.1em] uppercase opacity-70">
+                {partner}
+              </p>
+              <p className="mt-2 truncate text-[11px] leading-none font-medium">
+                {details[stage] ?? "\u00a0"}
+              </p>
             </li>
           );
         })}
       </ol>
-      {elapsed != null && (
-        <span className="mb-0.5 shrink-0 font-mono text-[11px] tracking-widest text-muted uppercase">
-          {(elapsed / 1000).toFixed(1)}s
-        </span>
-      )}
     </div>
   );
 }

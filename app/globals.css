@@ -1,47 +1,89 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #12110f;
-  --color-surface: #1a1916;
-  --color-fg: #f4f0e6;
-  --color-muted: #8c877a;
-  --color-hairline: #2e2c26;
-  --color-tungsten: #e8b14a;
-  --color-generic: #6e7380;
-  --color-danger: #d4604a;
+  --color-canvas: #f3eee6;
+  --color-surface: #fffdfa;
+  --color-ink: #111111;
+  --color-muted: #6f6860;
+  --color-hairline: #e4ddd2;
+  --color-coral: #ff4d2e;
+  --color-mint: #c8f54a;
+  --color-lilac: #c9b7ff;
+  --color-generic: #8a8680;
+  --color-danger: #e23b2f;
 
-  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-instrument-serif), ui-serif, georgia, serif;
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
 }
 
 html,
 body {
   background: var(--color-canvas);
-  color: var(--color-fg);
+  color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+.orb-coral {
+  background: radial-gradient(circle at 30% 30%, #ff8a74, #ff4d2e 55%, #ff4d2e00);
+}
+
+.orb-mint {
+  background: radial-gradient(circle at 35% 30%, #e8ff9a, #c8f54a 50%, #c8f54a00);
+}
+
+.orb-lilac {
+  background: radial-gradient(circle at 40% 28%, #efe8ff, #c9b7ff 52%, #c9b7ff00);
+}
+
+.phone-lift {
+  box-shadow:
+    0 1px 0 0 rgb(255 255 255 / 0.8) inset,
+    0 28px 50px -24px rgb(17 17 17 / 0.28),
+    0 10px 24px -16px rgb(17 17 17 / 0.18);
+}
+
+.cta-pop {
+  box-shadow: 0 10px 0 0 #111, 0 18px 40px -12px rgb(255 77 46 / 0.55);
+}
+
+.cta-pop:hover {
+  transform: translateY(2px);
+  box-shadow: 0 8px 0 0 #111, 0 14px 32px -12px rgb(255 77 46 / 0.5);
+}
+
+.cta-pop:active {
+  transform: translateY(8px);
+  box-shadow: 0 2px 0 0 #111;
 }
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgb(232 177 74 / 0.45);
+    box-shadow: 0 0 0 0 rgb(255 77 46 / 0.55);
   }
   70% {
-    box-shadow: 0 0 0 10px rgb(232 177 74 / 0);
+    box-shadow: 0 0 0 12px rgb(255 77 46 / 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(232 177 74 / 0);
+    box-shadow: 0 0 0 0 rgb(255 77 46 / 0);
   }
 }
 
 .pulse-ring {
-  animation: pulse-ring 1.6s ease-out infinite;
+  animation: pulse-ring 1.4s ease-out infinite;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(28px) rotate(-0.6deg);
   }
   to {
     opacity: 1;
@@ -50,5 +92,98 @@ body {
 }
 
 .rise {
-  animation: rise 0.4s ease-out both;
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes float-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(24px, -30px) scale(1.08);
+  }
+}
+
+@keyframes float-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-32px, 18px) scale(0.92);
+  }
+}
+
+@keyframes float-c {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(16px, 22px);
+  }
+}
+
+.float-a {
+  animation: float-a 11s ease-in-out infinite;
+}
+.float-b {
+  animation: float-b 14s ease-in-out infinite;
+}
+.float-c {
+  animation: float-c 9s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.bob {
+  animation: bob 5.5s ease-in-out infinite;
+}
+
+@keyframes shimmer-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(220%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.55) 50%,
+    transparent 70%
+  );
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .pulse-ring,
+  .float-a,
+  .float-b,
+  .float-c,
+  .bob,
+  .shimmer::after {
+    animation: none;
+  }
 }
