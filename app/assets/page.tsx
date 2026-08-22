@@ -17,8 +17,8 @@ import { useSessionGate } from "../components/useSessionGate";
 
 export default function AssetsPage() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useSessionGate();
-  const brand = useQuery(api.brands.get, isSignedIn ? {} : "skip");
+  const { isLoaded, isSignedIn, convexReady } = useSessionGate();
+  const brand = useQuery(api.brands.get, convexReady ? {} : "skip");
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) router.replace("/");

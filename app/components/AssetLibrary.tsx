@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { useSessionGate } from "./useSessionGate";
 
 /**
  * The asset collection area — shared by the onboarding wizard and /assets.
@@ -27,7 +28,8 @@ function formatSize(bytes: number) {
 }
 
 export default function AssetLibrary() {
-  const assets = useQuery(api.assets.list) ?? [];
+  const { convexReady } = useSessionGate();
+  const assets = useQuery(api.assets.list, convexReady ? {} : "skip") ?? [];
   const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
   const saveAsset = useMutation(api.assets.save);
   const removeAsset = useMutation(api.assets.remove);
@@ -39,6 +41,10 @@ export default function AssetLibrary() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function upload(files: FileList | File[]) {
+    if (!convexReady) {
+      setError("Still connecting — try again in a second");
+      return;
+    }
     const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
     if (!images.length) {
       setError("Drop image files (png, jpg, webp…)");

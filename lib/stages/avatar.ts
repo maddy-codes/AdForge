@@ -10,12 +10,16 @@ import { extract } from "@/lib/stages/extract";
 /**
  * Separate product surface: VEED talking-head spots (host sponsor).
  *
- * Two steps, two VEED models on fal:
- *   1. OpenAI casts an avatar from VEED's real roster and writes the spot
- *      (VO, director script, captions, music bed) grounded in extracted facts.
- *   2. `veed/avatars/text-to-video` renders the avatar actually speaking the
- *      VO, then `veed/subtitles` transcribes that real speech and burns in
- *      animated word-level captions.
+ * Two steps, three VEED-side models on fal:
+ *   1. OpenAI writes the spot (VO, director script, captions, music bed,
+ *      branded-set prompt, voice cast) grounded in extracted facts.
+ *   2. Render, branded path first: `fal-ai/nano-banana/edit` composites the
+ *      REAL product photo into a 9:16 frame — presenter holding the product
+ *      on a set in the brand's palette — then `veed/fabric-1.0/text` makes
+ *      that presenter speak the VO. If the branded chain fails (or no product
+ *      photo exists), fall back to VEED's stock roster via
+ *      `veed/avatars/text-to-video`. Either way `veed/subtitles` transcribes
+ *      the real speech and burns in animated word-level captions.
  *
  * Does not replace the fal LoRA films — this is the second media type.
  */
@@ -51,6 +55,12 @@ export type AvatarSpot = {
   brand: string;
   avatarId: AvatarId;
   avatarLook: string;
+  /** Image-model prompt for the branded frame VEED Fabric animates. */
+  scenePrompt: string;
+  /** One-line voice cast for VEED Fabric. */
+  voiceDescription: string;
+  /** Real product photo from extraction — the branded frame is built on it. */
+  productImage: string | null;
   musicBed: string;
   captions: string;
   vo: string;
@@ -64,6 +74,14 @@ const Spot = z.object({
   avatarLook: z
     .string()
     .describe("Why this cast: energy, framing, wardrobe vibe matching brand tone. Not a celebrity."),
+  scenePrompt: z
+    .string()
+    .describe(
+      "One-paragraph image-model prompt: presenter holding the real product from the supplied photo, on a set in the brand's palette. See THE SET rules."
+    ),
+  voiceDescription: z
+    .string()
+    .describe("One-line voice cast: gender, age range, mood, accent."),
   musicBed: z.string(),
   captions: z.string().describe("On-screen caption style and the one line that should burn in."),
   vo: z
@@ -78,6 +96,11 @@ export function getMockAvatar(): AvatarSpot {
     avatarId: "mira_vertical_primary",
     avatarLook:
       "Mira, direct-to-camera. Fresh not glam, pastel knit, bathroom-mirror energy. Warm, slightly sarcastic. Not a supermodel.",
+    scenePrompt:
+      "A friendly woman in her late twenties, pastel knit sweater, warm closed-mouth smile, waist-up facing camera, holding the watermelon-pink serum bottle from the photo beside her face with the label readable. Behind her, a watermelon-pink-to-mint pastel gradient studio wall, soft diffused key light. Vertical 9:16 phone-ad framing, no text, no logos.",
+    voiceDescription:
+      "Warm, playful female voice, late twenties, light American accent, friend-recommending energy.",
+    productImage: null,
     musicBed: "Soft lo-fi keys, no lyrics, 95 BPM. Lift on the end card.",
     captions: "Big, clean, left-aligned. Burn in: “lit-from-within after four days.”",
     vo: "Okay so I did not expect this. “My skin looked lit-from-within after four days. Four.” Watermelon Glow Dew Drops. Thirty-six dollars. That’s the post.",
@@ -92,11 +115,19 @@ export function getMockAvatar(): AvatarSpot {
  * stage direction lives in `script`, never in `vo`.
  */
 const SPOT_SYSTEM_PROMPT = [
-  "You are the creative director casting and writing a VEED avatar spot — a 9:16 talking-head ad for one product.",
+  "You are the creative director casting and writing a VEED avatar spot — a 9:16 talking-head ad for one product. The primary render composites the REAL product photo into a branded set and VEED Fabric makes that presenter speak; the stock roster below is the fallback cast.",
   "",
-  "CASTING — pick exactly one avatarId from this roster and match its energy to the brand tone and category:",
+  "THE SET (`scenePrompt`) — one paragraph for an image model that receives the real product photo and builds the frame VEED Fabric animates:",
+  "- One presenter matching the brand's energy: age range, styling, expression. Waist-up, facing camera, mouth closed, relaxed natural pose — this face will be animated to speak.",
+  "- The presenter holds the product from the supplied photo up beside their face, label facing camera and legible. Never redraw, recolor or restyle the product itself.",
+  "- The background IS the brand: name 2–3 concrete colours pulled from the tone (e.g. 'watermelon pink to mint pastel gradient'), a set that fits the category (bathroom shelf for skincare, desk for tech), soft key light.",
+  "- Vertical 9:16 phone-ad framing. No text, no logos, no watermarks anywhere in the frame.",
+  "",
+  "VOICE (`voiceDescription`) — one short line casting the voice: gender, age range, mood, accent. E.g. 'Warm, upbeat female voice, late twenties, light London accent'.",
+  "",
+  "FALLBACK CASTING — also pick exactly one avatarId from VEED's stock roster, matched to the brand tone, used if the branded set can't be built:",
   ...AVATAR_ROSTER.map((a) => `- ${a.id}: ${a.note}`),
-  "Direct-to-camera (primary) sells trust; alternate angles (secondary) sell intimacy; walking shots sell momentum. Choose deliberately and justify the cast in avatarLook.",
+  "Direct-to-camera (primary) sells trust; alternate angles (secondary) sell intimacy; walking shots sell momentum. Choose deliberately and justify the cast in avatarLook — the same energy should describe the scenePrompt presenter.",
   "",
   "VOICEOVER (`vo`) — the avatar will speak this text verbatim, so:",
   "- 12–20 seconds spoken ≈ 35–55 words. Count them.",
@@ -141,7 +172,11 @@ export async function avatarSpot(url: string): Promise<AvatarSpot> {
     });
     const parsed = completion.choices[0]?.message.parsed;
     if (!parsed) throw new Error("no avatar spot");
-    return { brand: facts.name, ...parsed };
+    // The branded frame is built on a real product photo — local mock svgs
+    // aren't reachable from fal, so only http URLs qualify.
+    const productImage =
+      facts.imageUrls.find((u) => u.startsWith("http")) ?? null;
+    return { brand: facts.name, productImage, ...parsed };
   } catch (err) {
     console.error("[avatar] failed, falling back to mock:", err);
     return getMockAvatar();
@@ -152,42 +187,99 @@ export async function avatarSpot(url: string): Promise<AvatarSpot> {
 /* Step 2 — render the spot through VEED on fal                        */
 /* ------------------------------------------------------------------ */
 
+export type AvatarEngine = "fabric" | "stock" | "mock";
+
+export type AvatarRenderInput = {
+  avatarId: AvatarId;
+  vo: string;
+  scenePrompt?: string;
+  voiceDescription?: string;
+  productImage?: string | null;
+};
+
 export type AvatarRender = {
   videoUrl: string;
+  /** fabric = branded set with the product; stock = roster fallback. */
+  engine: AvatarEngine;
   /** Served from the disk cache — warm demo runs skip the render. */
   cached: boolean;
   /** No FAL_KEY: a placeholder clip so the UI is never blocked. */
   mock: boolean;
 };
 
-// Avatar renders take minutes and cost credits — cache by (avatar, vo) so
-// rehearsal runs and the live demo hit disk, same idea as .lora-cache.
+// Avatar renders take minutes and cost credits — cache by the full render
+// recipe so rehearsal runs and the live demo hit disk, same idea as .lora-cache.
 const CACHE_DIR = path.join(process.cwd(), ".avatar-cache");
 
-function cacheKey(avatarId: string, vo: string): string {
-  return createHash("sha256").update(`${avatarId}\n${vo}`).digest("hex").slice(0, 16);
+function cacheKey(material: string): string {
+  return createHash("sha256").update(material).digest("hex").slice(0, 16);
 }
 
-async function readRenderCache(key: string): Promise<string | null> {
+type CacheEntry = { videoUrl: string; engine: Exclude<AvatarEngine, "mock"> };
+
+async function readRenderCache(key: string): Promise<CacheEntry | null> {
   try {
     const raw = await readFile(path.join(CACHE_DIR, `${key}.json`), "utf8");
-    const { videoUrl } = JSON.parse(raw) as { videoUrl?: string };
-    return videoUrl?.startsWith("http") ? videoUrl : null;
+    const parsed = JSON.parse(raw) as { videoUrl?: string; engine?: string };
+    if (!parsed.videoUrl?.startsWith("http")) return null;
+    return {
+      videoUrl: parsed.videoUrl,
+      engine: parsed.engine === "fabric" ? "fabric" : "stock",
+    };
   } catch {
     return null;
   }
 }
 
-async function writeRenderCache(key: string, videoUrl: string): Promise<void> {
+async function writeRenderCache(key: string, entry: CacheEntry): Promise<void> {
   try {
     await mkdir(CACHE_DIR, { recursive: true });
     await writeFile(
       path.join(CACHE_DIR, `${key}.json`),
-      JSON.stringify({ videoUrl }, null, 2)
+      JSON.stringify(entry, null, 2)
     );
   } catch (err) {
     console.error("[avatar] cache write failed (render still returned):", err);
   }
+}
+
+/**
+ * The branded frame: nano-banana composites the REAL product photo into the
+ * scenePrompt's set — presenter holding the product, brand-palette backdrop.
+ * This frame is what VEED Fabric animates, so the whole video is on-brand.
+ */
+async function buildBrandedFrame(
+  scenePrompt: string,
+  productImage: string
+): Promise<string> {
+  const { data } = await getFal().subscribe("fal-ai/nano-banana/edit", {
+    input: {
+      prompt: scenePrompt,
+      image_urls: [productImage],
+      aspect_ratio: "9:16",
+      output_format: "png",
+    },
+  });
+  const url = (data as { images: { url: string }[] }).images[0]?.url;
+  if (!url) throw new Error("nano-banana returned no frame");
+  return url;
+}
+
+/** VEED Fabric: the presenter in our branded frame speaks the VO. */
+async function fabricSpeak(
+  frameUrl: string,
+  vo: string,
+  voiceDescription?: string
+): Promise<string> {
+  const { data } = await getFal().subscribe("veed/fabric-1.0/text", {
+    input: {
+      image_url: frameUrl,
+      text: vo,
+      voice_description: voiceDescription || undefined,
+      resolution: "480p",
+    },
+  });
+  return (data as { video: { url: string } }).video.url;
 }
 
 /**
@@ -215,22 +307,43 @@ async function burnAvatarCaptions(videoUrl: string): Promise<string> {
 }
 
 export async function renderAvatarSpot(
-  avatarId: AvatarId,
-  vo: string
+  input: AvatarRenderInput
 ): Promise<AvatarRender> {
+  const { avatarId, vo, scenePrompt, voiceDescription } = input;
+  const productImage = input.productImage?.startsWith("http")
+    ? input.productImage
+    : null;
+
   if (!process.env.FAL_KEY) {
     await new Promise((r) => setTimeout(r, 1500));
-    return { videoUrl: "/mock/ad-1.mp4", cached: false, mock: true };
+    return { videoUrl: "/mock/ad-1.mp4", engine: "mock", cached: false, mock: true };
   }
 
-  const key = cacheKey(avatarId, vo);
+  const key = cacheKey(
+    [avatarId, vo, scenePrompt ?? "", productImage ?? ""].join("\n")
+  );
   const hit = await readRenderCache(key);
-  if (hit) return { videoUrl: hit, cached: true, mock: false };
+  if (hit) return { ...hit, cached: true, mock: false };
 
-  const { data } = await getFal().subscribe("veed/avatars/text-to-video", {
-    input: { avatar_id: avatarId, text: vo },
-  });
-  const rawUrl = (data as { video: { url: string } }).video.url;
+  // Branded path first: product photo → brand-set frame → Fabric speaks it.
+  let engine: Exclude<AvatarEngine, "mock"> = "stock";
+  let rawUrl: string | null = null;
+  if (productImage && scenePrompt) {
+    try {
+      const frameUrl = await buildBrandedFrame(scenePrompt, productImage);
+      rawUrl = await fabricSpeak(frameUrl, vo, voiceDescription);
+      engine = "fabric";
+    } catch (err) {
+      console.error("[avatar] branded Fabric chain failed, falling back to stock roster:", err);
+    }
+  }
+
+  if (!rawUrl) {
+    const { data } = await getFal().subscribe("veed/avatars/text-to-video", {
+      input: { avatar_id: avatarId, text: vo },
+    });
+    rawUrl = (data as { video: { url: string } }).video.url;
+  }
 
   let videoUrl = rawUrl;
   try {
@@ -240,6 +353,6 @@ export async function renderAvatarSpot(
     console.error("[avatar] VEED subtitles failed, using uncaptioned spot:", err);
   }
 
-  await writeRenderCache(key, videoUrl);
-  return { videoUrl, cached: false, mock: false };
+  await writeRenderCache(key, { videoUrl, engine });
+  return { videoUrl, engine, cached: false, mock: false };
 }

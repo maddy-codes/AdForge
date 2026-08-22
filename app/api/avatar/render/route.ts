@@ -6,10 +6,14 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const { avatarId, vo } = (await req.json()) as {
-    avatarId?: string;
-    vo?: string;
-  };
+  const { avatarId, vo, scenePrompt, voiceDescription, productImage } =
+    (await req.json()) as {
+      avatarId?: string;
+      vo?: string;
+      scenePrompt?: string;
+      voiceDescription?: string;
+      productImage?: string | null;
+    };
   if (!avatarId || !vo) {
     return Response.json({ error: "avatarId and vo required" }, { status: 400 });
   }
@@ -17,7 +21,14 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: `unknown avatarId: ${avatarId}` }, { status: 400 });
   }
   try {
-    const result = await renderAvatarSpot(avatarId, vo);
+    const result = await renderAvatarSpot({
+      avatarId,
+      vo,
+      scenePrompt: typeof scenePrompt === "string" ? scenePrompt : undefined,
+      voiceDescription:
+        typeof voiceDescription === "string" ? voiceDescription : undefined,
+      productImage: typeof productImage === "string" ? productImage : null,
+    });
     return Response.json(result);
   } catch (err) {
     return Response.json(

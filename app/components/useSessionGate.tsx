@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { useConvexAuth } from "convex/react";
 
 const COOKIE = "adforge_guest=1";
 
@@ -21,6 +22,13 @@ type Gate = {
   isSignedIn: boolean;
   isGuest: boolean;
   isIn: boolean;
+  /**
+   * Clerk being signed in isn't enough for Convex calls — the Convex socket
+   * authenticates asynchronously after Clerk loads. Auth-required queries and
+   * mutations must wait for this, or ctx.auth sees no identity. Always false
+   * for guests.
+   */
+  convexReady: boolean;
   enterGuest: () => void;
   leaveGuest: () => void;
 };
@@ -29,6 +37,7 @@ const GateContext = createContext<Gate | null>(null);
 
 export function SessionGateProvider({ children }: { children: React.ReactNode }) {
   const { isLoaded: clerkLoaded, isSignedIn } = useAuth();
+  const { isAuthenticated: convexReady } = useConvexAuth();
   const [guest, setGuest] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
@@ -60,10 +69,11 @@ export function SessionGateProvider({ children }: { children: React.ReactNode })
       isSignedIn: !!isSignedIn,
       isGuest: guest && !isSignedIn,
       isIn: !!isSignedIn || guest,
+      convexReady,
       enterGuest,
       leaveGuest,
     }),
-    [enterGuest, guest, isLoaded, isSignedIn, leaveGuest],
+    [convexReady, enterGuest, guest, isLoaded, isSignedIn, leaveGuest],
   );
 
   return <GateContext.Provider value={value}>{children}</GateContext.Provider>;

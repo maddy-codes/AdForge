@@ -12,7 +12,7 @@ import { useSessionGate } from "./components/useSessionGate";
 
 export default function Home() {
   const router = useRouter();
-  const { isLoaded, isIn, isSignedIn } = useSessionGate();
+  const { isLoaded, isIn, isSignedIn, convexReady } = useSessionGate();
   const [intro, setIntro] = useState(true);
   const endIntro = useCallback(() => setIntro(false), []);
 
@@ -22,7 +22,9 @@ export default function Home() {
 
   // New signed-in users go through onboarding once (guests skip it — the
   // demo path stays auth-free). `undefined` means the query is still loading.
-  const brand = useQuery(api.brands.get, isSignedIn ? {} : "skip");
+  // Wait for convexReady: before the socket authenticates, brands.get would
+  // answer null and misroute onboarded users into the wizard.
+  const brand = useQuery(api.brands.get, isSignedIn && convexReady ? {} : "skip");
   const needsOnboarding =
     isSignedIn && brand !== undefined && (!brand || !brand.onboardedAt);
 

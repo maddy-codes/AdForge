@@ -19,9 +19,9 @@ type Step = "brand" | "assets";
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useSessionGate();
-  const brand = useQuery(api.brands.get, isSignedIn ? {} : "skip");
-  const assets = useQuery(api.assets.list, isSignedIn ? {} : "skip");
+  const { isLoaded, isSignedIn, convexReady } = useSessionGate();
+  const brand = useQuery(api.brands.get, convexReady ? {} : "skip");
+  const assets = useQuery(api.assets.list, convexReady ? {} : "skip");
   const upsert = useMutation(api.brands.upsert);
   const complete = useMutation(api.brands.completeOnboarding);
 
@@ -149,7 +149,7 @@ export default function OnboardingPage() {
             </Field>
             <button
               onClick={saveBrand}
-              disabled={busy || !name.trim()}
+              disabled={busy || !name.trim() || !convexReady}
               className="cta-pop mt-2 self-start rounded-2xl bg-coral px-8 py-3.5 font-display text-base font-bold text-white disabled:opacity-40"
             >
               {busy ? "Saving…" : "Continue →"}
@@ -161,14 +161,14 @@ export default function OnboardingPage() {
             <div className="flex flex-wrap items-center gap-4">
               <button
                 onClick={finish}
-                disabled={busy || (assets ?? []).length === 0}
+                disabled={busy || !convexReady || (assets ?? []).length === 0}
                 className="cta-pop rounded-2xl bg-coral px-8 py-3.5 font-display text-base font-bold text-white disabled:opacity-40"
               >
                 {busy ? "Finishing…" : "Finish setup"}
               </button>
               <button
                 onClick={finish}
-                disabled={busy}
+                disabled={busy || !convexReady}
                 className="font-display text-[12px] font-semibold tracking-wide text-muted uppercase hover:text-ink"
               >
                 Skip for now — scrape the page instead

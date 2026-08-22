@@ -47,7 +47,13 @@ export default function AvatarPage() {
         const renderRes = await fetch("/api/avatar/render", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ avatarId: data.avatarId, vo: data.vo }),
+          body: JSON.stringify({
+            avatarId: data.avatarId,
+            vo: data.vo,
+            scenePrompt: data.scenePrompt,
+            voiceDescription: data.voiceDescription,
+            productImage: data.productImage,
+          }),
         });
         const rendered = (await renderRes.json()) as AvatarRender & {
           error?: string;
@@ -88,9 +94,10 @@ export default function AvatarPage() {
           </span>
         </h1>
         <p className="mt-5 max-w-xl text-base leading-relaxed text-muted">
-          Separate from the LoRA product films. We cast from VEED&rsquo;s avatar
-          roster, write the VO, then VEED renders the spokesperson actually
-          speaking it — captions transcribed from the real voice track.
+          Separate from the LoRA product films. We build a branded set from
+          your real product photo — presenter holding the product, backdrop in
+          your palette — then VEED Fabric makes them speak the VO, captions
+          transcribed from the real voice track.
         </p>
       </header>
 
@@ -155,7 +162,9 @@ export default function AvatarPage() {
                     {castLabel(spot.avatarId)}
                   </p>
                   <p className="text-xs leading-relaxed text-white/60">
-                    VEED is rendering the spokesperson speaking your VO…
+                    {spot.productImage
+                      ? "VEED Fabric is building your branded set — product in hand — and making the presenter speak…"
+                      : "VEED is rendering the spokesperson speaking your VO…"}
                   </p>
                 </div>
               ) : (
@@ -180,7 +189,15 @@ export default function AvatarPage() {
                 Cast: {castLabel(spot.avatarId)}
               </span>
               <span className="rounded-full bg-surface px-3 py-1.5 font-display text-[11px] font-semibold tracking-wide text-muted uppercase">
-                veed/avatars · text-to-video
+                {video
+                  ? video.engine === "fabric"
+                    ? "veed/fabric-1.0 · branded set"
+                    : video.engine === "stock"
+                      ? "veed/avatars · stock set"
+                      : "mock render"
+                  : spot.productImage
+                    ? "veed/fabric-1.0 · branded set"
+                    : "veed/avatars · text-to-video"}
               </span>
             </div>
 
@@ -191,6 +208,8 @@ export default function AvatarPage() {
             )}
 
             <Block label="Why this cast" body={spot.avatarLook} />
+            <Block label="The set — branded frame, product in hand" body={spot.scenePrompt} />
+            <Block label="Voice cast" body={spot.voiceDescription} />
             <Block label="Voiceover — spoken verbatim by the avatar" body={spot.vo} />
             <Block label="Director script" body={spot.script} />
             <Block label="Music bed" body={spot.musicBed} />
