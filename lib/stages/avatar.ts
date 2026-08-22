@@ -2,6 +2,10 @@ import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { getOpenAI } from "@/lib/openai";
 import { extract } from "@/lib/stages/extract";
+import {
+  formatBriefForPrompt,
+  type AdBrief,
+} from "@/lib/brief";
 
 /**
  * Separate product surface: VEED-style talking-head spots.
@@ -43,11 +47,15 @@ export function getMockAvatar(): AvatarSpot {
   };
 }
 
-export async function avatarSpot(url: string): Promise<AvatarSpot> {
+export async function avatarSpot(
+  url: string,
+  brief?: AdBrief
+): Promise<AvatarSpot> {
   if (!process.env.OPENAI_API_KEY) return getMockAvatar();
 
   try {
     const facts = await extract(url);
+    const director = formatBriefForPrompt(brief);
     const completion = await getOpenAI().chat.completions.parse({
       model: "gpt-4o",
       temperature: 0.7,
@@ -59,7 +67,10 @@ export async function avatarSpot(url: string): Promise<AvatarSpot> {
             "The avatar must feel like this brand, not a generic AI presenter.",
             "VO is 12–20 seconds. Storyboard, not brochure. No Discover/Experience/Revitalize.",
             "Never invent ingredients or prices. Ground in the facts.",
-          ].join(" "),
+            director ?? "",
+          ]
+            .filter(Boolean)
+            .join(" "),
         },
         {
           role: "user",
@@ -70,6 +81,7 @@ export async function avatarSpot(url: string): Promise<AvatarSpot> {
             tone: facts.tone,
             features: facts.features,
             materials: facts.materials,
+            directorBrief: director,
           }),
         },
       ],

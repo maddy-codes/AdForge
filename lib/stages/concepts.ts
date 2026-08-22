@@ -2,6 +2,10 @@ import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { getOpenAI } from "@/lib/openai";
 import type { Concept, ProductFacts, ReviewHook } from "@/lib/types";
+import {
+  formatBriefForPrompt,
+  type AdBrief,
+} from "@/lib/brief";
 
 /**
  * Stage 3 — OpenAI as creative director.
@@ -143,7 +147,8 @@ function toConcepts(
 
 async function directConcepts(
   facts: ProductFacts,
-  hooks: ReviewHook[]
+  hooks: ReviewHook[],
+  brief?: AdBrief
 ): Promise<Concept[]> {
   const quoteBlock =
     hooks.length === 0
@@ -151,6 +156,11 @@ async function directConcepts(
       : hooks
           .map((h, i) => `${i + 1}. "${h.quote}" — theme: ${h.theme}`)
           .join("\n");
+
+  const director = formatBriefForPrompt(brief);
+  const shotConstraint = brief?.constraint
+    ? `Shot prompts MUST honour this constraint: ${brief.constraint}. If it says no faces, never put a person in frame. If product only, the product is the actor.`
+    : "";
 
   const completion = await getOpenAI().chat.completions.parse({
     model: MODEL,
@@ -167,7 +177,11 @@ async function directConcepts(
           "Never invent ingredients, prices, or claims that are not in the product facts or the chosen quote.",
           "Name the real product and price on the end card. Ground the visual in category, materials, and tone.",
           "Each shots[] item is a single camera setup that will be concatenated into a Flux keyframe + Kling image-to-video prompt: concrete lighting, surface, product position, motion. No hashtags, no camera-jargon dumps.",
-        ].join("\n"),
+          shotConstraint,
+          director ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
       {
         role: "user",
@@ -188,7 +202,10 @@ async function directConcepts(
           "",
           "Customer review quotes (copy verbatim):",
           quoteBlock,
-        ].join("\n"),
+          director ? `\n${director}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
     ],
     response_format: zodResponseFormat(DirectedConcepts, "ad_concepts"),
@@ -210,14 +227,15 @@ async function directConcepts(
 
 export async function concepts(
   facts: ProductFacts,
-  hooks: ReviewHook[]
+  hooks: ReviewHook[],
+  brief?: AdBrief
 ): Promise<Concept[]> {
   if (!process.env.OPENAI_API_KEY) {
     return getMockConcepts();
   }
 
   try {
-    return await directConcepts(facts, hooks);
+    return await directConcepts(facts, hooks, brief);
   } catch (err) {
     console.error("[concepts] OpenAI failed, falling back to mock:", err);
     return getMockConcepts();

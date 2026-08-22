@@ -9,6 +9,7 @@ import { reviews } from "@/lib/stages/reviews";
 import { concepts, CONCEPT_COUNT } from "@/lib/stages/concepts";
 import { trainLora, type LoraResult } from "@/lib/stages/lora";
 import { render } from "@/lib/stages/render";
+import { parseBrief, type AdBrief } from "@/lib/brief";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,10 +21,12 @@ export const maxDuration = 300;
  * instead of losing it.
  */
 export async function POST(req: NextRequest) {
-  const { url } = (await req.json()) as { url?: string };
+  const body = (await req.json()) as { url?: string; brief?: unknown };
+  const url = body.url;
   if (!url) {
     return NextResponse.json({ error: "url required" }, { status: 400 });
   }
+  const brief = parseBrief(body.brief);
 
   // Per-job write bearer: stored on the job, never sent to the browser.
   const token = randomUUID();
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (authToken) convex.setAuth(authToken);
   const jobId = await convex.mutation(api.jobs.create, { url, token });
 
-  after(() => runPipeline(jobId, token, url));
+  after(() => runPipeline(jobId, token, url, brief));
 
   return NextResponse.json({ jobId }, { status: 202 });
 }
@@ -47,7 +50,12 @@ async function readyOrNull<T>(p: Promise<T>): Promise<T | null> {
   return Promise.race([p, Promise.resolve(null)]) as Promise<T | null>;
 }
 
-async function runPipeline(jobId: Id<"jobs">, token: string, url: string) {
+async function runPipeline(
+  jobId: Id<"jobs">,
+  token: string,
+  url: string,
+  brief?: AdBrief,
+) {
   const convex = getConvexServer();
   const job = { jobId, token };
 
@@ -84,7 +92,7 @@ async function runPipeline(jobId: Id<"jobs">, token: string, url: string) {
 
     // 3. Concepts ---------------------------------------------------------
     await convex.mutation(api.jobs.stageRunning, { ...job, stage: "concepts" });
-    const all = await concepts(facts, hooks);
+    const all = await concepts(facts, hooks, brief);
     const chosen = all.slice(0, CONCEPT_COUNT);
     await convex.mutation(api.jobs.recordConcepts, { ...job, concepts: chosen });
 

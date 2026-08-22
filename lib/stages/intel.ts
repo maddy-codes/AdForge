@@ -4,6 +4,10 @@ import { getOpenAI } from "@/lib/openai";
 import { tavilySearch } from "@/lib/tavily";
 import { extract } from "@/lib/stages/extract";
 import type { ProductFacts } from "@/lib/types";
+import {
+  formatBriefForPrompt,
+  type AdBrief,
+} from "@/lib/brief";
 
 /**
  * Separate product surface from brand-film generation.
@@ -110,15 +114,23 @@ export function getMockIntel(): IntelResult {
   };
 }
 
-async function nameRivals(facts: ProductFacts): Promise<Rival[]> {
+async function nameRivals(
+  facts: ProductFacts,
+  brief?: AdBrief
+): Promise<Rival[]> {
+  const director = formatBriefForPrompt(brief);
   const completion = await getOpenAI().chat.completions.parse({
     model: "gpt-4o",
     temperature: 0.4,
     messages: [
       {
         role: "system",
-        content:
+        content: [
           "You name direct advertising competitors — brands a media buyer would steal short-form ads from. Same category, similar shopper. Never list the brand itself. Prefer 3, max 4.",
+          director ?? "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
       },
       {
         role: "user",
@@ -139,8 +151,10 @@ async function nameRivals(facts: ProductFacts): Promise<Rival[]> {
 async function reverseEngineer(
   facts: ProductFacts,
   rivals: Rival[],
-  snippets: { competitor: string; title: string; url: string; content: string }[]
+  snippets: { competitor: string; title: string; url: string; content: string }[],
+  brief?: AdBrief
 ): Promise<StolenFormula[]> {
+  const director = formatBriefForPrompt(brief);
   const completion = await getOpenAI().chat.completions.parse({
     model: "gpt-4o",
     temperature: 0.5,
@@ -153,7 +167,10 @@ async function reverseEngineer(
           "Do NOT recreate their film, talent, wording, trademarks, or packaging.",
           "If snippets are thin, still infer a plausible category formula from the competitor's known advertising style.",
           "One formula per competitor. prompt is what we would send to an image-to-video model for OUR product.",
-        ].join(" "),
+          director ?? "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       },
       {
         role: "user",
@@ -166,6 +183,7 @@ async function reverseEngineer(
           },
           rivals,
           adSnippets: snippets,
+          directorBrief: director,
         }),
       },
     ],
@@ -176,13 +194,16 @@ async function reverseEngineer(
   return parsed.formulas;
 }
 
-export async function competitorIntel(url: string): Promise<IntelResult> {
+export async function competitorIntel(
+  url: string,
+  brief?: AdBrief
+): Promise<IntelResult> {
   const live = Boolean(process.env.TAVILY_API_KEY && process.env.OPENAI_API_KEY);
   if (!live) return getMockIntel();
 
   try {
     const facts = await extract(url);
-    const rivals = await nameRivals(facts);
+    const rivals = await nameRivals(facts, brief);
 
     const searches = await Promise.all(
       rivals.map(async (rival) => {
@@ -199,7 +220,7 @@ export async function competitorIntel(url: string): Promise<IntelResult> {
       })
     );
     const snippets = searches.flat();
-    const formulas = await reverseEngineer(facts, rivals, snippets);
+    const formulas = await reverseEngineer(facts, rivals, snippets, brief);
 
     return {
       brand: facts.name,
