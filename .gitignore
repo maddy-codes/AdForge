@@ -1,0 +1,23 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# Cache — LoRA ids, pre-generated hero videos, scraped assets
+.cache/
+public/cache/
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
