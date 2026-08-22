@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.95",
+    "@fal-ai/client": "^1.10.1",
     "convex": "^1.45.0",
+    "jszip": "^3.10.1",
     "next": "^15.5.23",
     "react": "19.1.1",
     "react-dom": "19.1.1"
