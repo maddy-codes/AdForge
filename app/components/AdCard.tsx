@@ -1,83 +1,202 @@
 "use client";
 
-import { useState } from "react";
-import type { Concept, RenderResult } from "@/lib/types";
+import { useRef, useState, type PointerEvent } from "react";
+import type { Concept, RenderResult, ReviewHook } from "@/lib/types";
+
+const GLOWS = [
+  "shadow-[0_24px_60px_-20px_rgb(255_77_46/0.55)]",
+  "shadow-[0_24px_60px_-20px_rgb(200_245_74/0.7)]",
+  "shadow-[0_24px_60px_-20px_rgb(201_183_255/0.7)]",
+];
 
 /**
- * The before/after toggle is the differentiator visual (CLAUDE.md, PRD §5) —
- * generic output vs brand-LoRA output on the same prompt. Prioritised over any
- * other embellishment.
+ * Comparison is the card. Sliding bezel is the 2-meter signal;
+ * drag-wipe is the close-up. Generic is a still, Brand LoRA is video.
  */
 export default function AdCard({
   index,
   concept,
   result,
+  review,
 }: {
   index: number;
   concept: Concept;
   result: RenderResult;
+  review?: ReviewHook;
 }) {
   const [showGeneric, setShowGeneric] = useState(false);
+  const [wipe, setWipe] = useState<number | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
   const canCompare = Boolean(result.genericKeyframeUrl && result.keyframeUrl);
+
+  const genericReveal = wipe ?? (showGeneric ? 1 : 0);
+  const genericActive = wipe !== null ? wipe >= 0.5 : showGeneric;
+
+  function ratio(clientX: number) {
+    const el = frameRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  }
+
+  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (!canCompare) return;
+    dragging.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setWipe(ratio(e.clientX));
+  }
+
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    if (!dragging.current) return;
+    setWipe(ratio(e.clientX));
+  }
+
+  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const next = ratio(e.clientX);
+    setShowGeneric(next >= 0.5);
+    setWipe(null);
+  }
+
+  function select(generic: boolean) {
+    setWipe(null);
+    setShowGeneric(generic);
+  }
 
   return (
     <article
-      className="rise overflow-hidden rounded-2xl border border-white/10 bg-ink-soft"
-      style={{ animationDelay: `${index * 90}ms` }}
+      className="rise group"
+      style={{ animationDelay: `${index * 110}ms` }}
     >
-      <div className="relative aspect-[9/16] bg-black">
-        {showGeneric && canCompare ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={result.genericKeyframeUrl}
-            alt="Generic output, no brand LoRA"
-            className="h-full w-full object-cover"
-          />
-        ) : (
+      <div
+        className={`phone-lift relative rounded-[36px] border border-white bg-surface p-2.5 transition-transform duration-300 group-hover:-translate-y-2 ${GLOWS[index % GLOWS.length]}`}
+      >
+        <div
+          ref={frameRef}
+          className={`relative aspect-[9/16] overflow-hidden rounded-[28px] bg-ink ${
+            canCompare ? "cursor-ew-resize touch-none" : ""
+          }`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          {canCompare && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={result.genericKeyframeUrl}
+              alt="No LoRA — generic output"
+              draggable={false}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          )}
           <video
             src={result.videoUrl}
             poster={result.keyframeUrl}
-            className="h-full w-full object-cover"
+            className={
+              canCompare
+                ? `absolute inset-0 h-full w-full object-cover ${
+                    wipe === null
+                      ? "transition-[clip-path] duration-[180ms]"
+                      : ""
+                  }`
+                : "h-full w-full object-cover"
+            }
+            style={
+              canCompare
+                ? { clipPath: `inset(0 0 0 ${genericReveal * 100}%)` }
+                : undefined
+            }
             autoPlay
             loop
             muted
             playsInline
           />
-        )}
 
-        {canCompare && (
-          <button
-            onClick={() => setShowGeneric((v) => !v)}
-            className="absolute right-3 bottom-3 rounded-full border border-white/20 bg-black/65 px-3 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:bg-black/85"
+          <span
+            className="pointer-events-none absolute top-2.5 left-1/2 z-20 h-5 w-[72px] -translate-x-1/2 rounded-full bg-black/90"
+            aria-hidden
+          />
+
+          <span className="pointer-events-none absolute top-3 left-3 z-20 rounded-full bg-mint px-2 py-0.5 font-display text-[10px] font-bold tracking-wide text-ink">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+
+          {wipe !== null && (
+            <div
+              className="pointer-events-none absolute inset-y-0 z-10 w-0.5 bg-mint"
+              style={{ left: `${wipe * 100}%` }}
+            >
+              <span className="absolute top-1/2 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-ink font-display text-xs text-mint">
+                ⇄
+              </span>
+            </div>
+          )}
+        </div>
+
+        {canCompare ? (
+          <div
+            role="group"
+            aria-label="Compare generic and brand LoRA"
+            className="relative mt-2 grid grid-cols-2 rounded-full bg-canvas p-1"
           >
-            {showGeneric ? "Show brand LoRA" : "Show generic"}
-          </button>
+            <span
+              className={`pointer-events-none absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full transition-all duration-200 ease-out ${
+                genericActive ? "translate-x-0 bg-generic" : "translate-x-full bg-ink"
+              }`}
+              aria-hidden
+            />
+            <button
+              type="button"
+              aria-pressed={genericActive}
+              onClick={() => select(true)}
+              className={`relative z-10 py-2 font-display text-[11px] font-semibold tracking-wide uppercase ${
+                genericActive ? "text-white" : "text-muted hover:text-ink"
+              }`}
+            >
+              No LoRA
+            </button>
+            <button
+              type="button"
+              aria-pressed={!genericActive}
+              onClick={() => select(false)}
+              className={`relative z-10 py-2 font-display text-[11px] font-semibold tracking-wide uppercase ${
+                !genericActive ? "text-mint" : "text-muted hover:text-ink"
+              }`}
+            >
+              Brand LoRA
+            </button>
+          </div>
+        ) : (
+          <p className="mt-2 rounded-full bg-ink py-2 text-center font-display text-[11px] font-semibold tracking-wide text-mint uppercase">
+            Brand LoRA
+          </p>
         )}
-
-        <span
-          className={`absolute top-3 left-3 rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wider uppercase ${
-            showGeneric
-              ? "bg-white/15 text-white/70"
-              : "bg-melon text-black"
-          }`}
-        >
-          {showGeneric ? "Generic" : "Brand LoRA"}
-        </span>
       </div>
 
-      <div className="space-y-3 p-4">
-        <h3 className="text-base leading-snug font-semibold">{concept.hook}</h3>
-        <p className="text-sm leading-relaxed text-white/55">
-          {concept.script}
-        </p>
-        <details className="group">
-          <summary className="cursor-pointer list-none text-xs text-white/40 hover:text-white/70">
-            Shot list ({concept.shots.length}) ▾
+      <div className="space-y-2.5 px-1 pt-5">
+        <h3 className="font-display text-xl leading-snug font-semibold tracking-tight">
+          {concept.hook}
+        </h3>
+        {review && (
+          <p className="flex flex-wrap items-baseline gap-2 text-sm text-muted">
+            <span className="italic text-ink/80">“{review.quote}”</span>
+            <span className="rounded-full bg-lilac/60 px-2 py-0.5 font-mono text-[10px] tracking-widest text-ink uppercase">
+              {review.theme}
+            </span>
+          </p>
+        )}
+        <p className="text-sm leading-relaxed text-muted">{concept.script}</p>
+        <details>
+          <summary className="cursor-pointer font-display text-[12px] font-semibold tracking-wide text-muted uppercase hover:text-ink">
+            Shot list ({concept.shots.length})
           </summary>
-          <ol className="mt-2 space-y-1.5 text-xs text-white/50">
+          <ol className="mt-2 space-y-1.5 text-xs text-muted">
             {concept.shots.map((shot, i) => (
               <li key={i} className="flex gap-2">
-                <span className="text-melon/70">{i + 1}.</span>
+                <span className="font-display font-bold text-coral">{i + 1}.</span>
                 <span>{shot}</span>
               </li>
             ))}
